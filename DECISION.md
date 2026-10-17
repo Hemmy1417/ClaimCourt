@@ -120,7 +120,7 @@ The nearest patterns found, and why this is not one of them:
 | Parametric trigger determination | Whether a measured threshold was crossed in an insured window | Judges the world against a number. ClaimCourt judges prose against prose, and has no measurement in it. |
 | Dispute adjudication between two parties | Which side public evidence supports | Produces a winner. ClaimCourt produces no winner: an unsupported refusal is not a payable claim, and the contract says so explicitly. |
 | Specification or policy conformance | Whether an artefact meets a frozen specification | Judges an artefact against a rule. ClaimCourt judges *an assertion about a rule* - whether the rule, as written, says what somebody claimed it says. |
-| Document authenticity and provenance | Whether bytes are what they claim to be | A precondition here, not the question. ClaimCourt hashes both documents and then reads them. |
+| Document authenticity checking | Whether bytes are what they claim to be | A precondition here, not the question. ClaimCourt hashes both documents and then reads them. |
 
 The distinct axis is **review of an authority's stated rationale against the
 rule it invokes, with both the rule and the rationale hash-bound, producing

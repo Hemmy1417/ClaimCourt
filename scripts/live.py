@@ -44,6 +44,7 @@ POLICY = "policy-household-v1.txt"
 NOTICE_UNOCCUPIED = "notice-unoccupied.txt"
 NOTICE_LATE = "notice-late-notification.txt"
 NOTICE_FLOOD = "notice-flood-clause.txt"
+NOTICE_JEWELLERY = "notice-jewellery-limit.txt"
 NOTICE_DIRECTED = "notice-unoccupied-directed.txt"
 
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -148,16 +149,41 @@ def revert_reason(receipt):
 
 
 def consensus_summary(receipt):
+    """Agreement as the receipt actually records it. An idle validator is not
+    a disagreeing one, and collapsing the two would overstate dissent as
+    easily as it would hide it."""
     data = receipt.get("consensus_data") or {}
     votes = data.get("votes") or {}
-    agree = sum(1 for v in votes.values() if str(v).lower().startswith("agree"))
-    return "%d/%d agree" % (agree, len(votes)) if votes else "no votes recorded"
+    if not votes:
+        return "no votes recorded"
+    agree = sum(1 for v in votes.values() if str(v).lower() == "agree")
+    disagree = sum(1 for v in votes.values()
+                   if str(v).lower().startswith("disagree"))
+    other = len(votes) - agree - disagree
+    return "%d agree, %d disagree, %d idle of %d" % (
+        agree, disagree, other, len(votes))
+
+
+def execution_result(receipt):
+    """On this network the top-level execution_result is empty; the real
+    value is on the leader receipt."""
+    named = receipt.get("execution_result_name") or receipt.get("result_name")
+    leader = (receipt.get("consensus_data") or {}).get("leader_receipt")
+    if isinstance(leader, list) and leader:
+        return str(leader[0].get("execution_result") or named or "unknown")
+    return str(named or "unknown")
+
+
+def lifecycle(receipt):
+    return str(receipt.get("status_name") or receipt.get("status"))
 
 
 class Chain:
     def __init__(self, account):
         self.client = create_client(chain=chains.studionet, account=account)
         self.account = account
+        self.transactions = []
+        self.address = ""
 
     def deploy(self):
         code = CONTRACT.read_bytes()
@@ -175,10 +201,10 @@ class Chain:
         if not address:
             raise SystemExit("no contract address in the receipt: %s"
                              % json.dumps(receipt)[:400])
-        result = str(receipt.get("execution_result"))
+        result = execution_result(receipt)
         say("deploy tx %s" % _hex(tx_hash))
-        say("deploy status %s, execution %s, %s"
-            % (receipt.get("status"), result, consensus_summary(receipt)))
+        say("deploy lifecycle %s, execution %s, %s"
+            % (lifecycle(receipt), result, consensus_summary(receipt)))
         if result.upper().endswith("ERROR"):
             raise SystemExit("deployment executed with an error: %s"
                              % revert_reason(receipt))
@@ -198,9 +224,10 @@ class Chain:
         receipt = self.client.wait_for_transaction_receipt(
             transaction_hash=tx_hash, status=TransactionStatus.ACCEPTED,
             interval=5000, retries=100)
-        result = str(receipt.get("execution_result"))
+        result = execution_result(receipt)
         say("  %-28s tx %s  %s  %s"
             % (label, _hex(tx_hash), result, consensus_summary(receipt)))
+        self.transactions.append((label, _hex(tx_hash)))
         if result.upper().endswith("ERROR"):
             say("  revert: %s" % revert_reason(receipt))
             raise SystemExit("%s failed on chain" % label)
@@ -212,11 +239,8 @@ class Chain:
                                          args=args or [])
 
     def finality(self, tx_hash):
-        try:
-            tx = self.client.get_transaction(transaction_hash=tx_hash)
-            return str(tx.get("status")), consensus_summary(tx)
-        except Exception as error:
-            return "unknown (%s)" % str(error)[:80], ""
+        tx = self.client.get_transaction(transaction_hash=tx_hash)
+        return lifecycle(tx), execution_result(tx), consensus_summary(tx)
 
 
 def _hex(value):
@@ -232,6 +256,16 @@ GROUND_UNOCCUPIED = ("the insured address was left unoccupied for more than "
 GROUND_LATE = ("because the notification was late the cover for this claim "
                "ended and no payment is due")
 GROUND_FLOOD = "the damage was caused by flood or rising groundwater"
+GROUND_JEWELLERY = ("because the claim exceeds the jewellery limit we are "
+                    "declining the claim in its entirety")
+
+
+def expect_one_of(label, actual, allowed):
+    ok = actual in allowed
+    say("    %-44s %s  (%s)" % (label, "OK" if ok else "WRONG", actual))
+    if not ok:
+        raise SystemExit("%s: expected one of %r, got %r"
+                         % (label, allowed, actual))
 
 
 def expect(label, actual, wanted):
@@ -262,7 +296,7 @@ def main():
 
     documents = {}
     for name in [POLICY, NOTICE_UNOCCUPIED, NOTICE_LATE, NOTICE_FLOOD,
-                 NOTICE_DIRECTED]:
+                 NOTICE_JEWELLERY, NOTICE_DIRECTED]:
         url, digest, size = published_sha(args.commit, name)
         documents[name] = (url, digest)
         say("document  %-34s %d bytes  %s" % (name, size, digest))
@@ -280,11 +314,14 @@ def main():
     say()
 
     policy_url, policy_sha = documents[POLICY]
-    say("registering the clause set")
-    chain.write("register_clause_set",
-                ["Household contents wording, synthetic edition 1",
-                 policy_url, policy_sha, 365], "register_clause_set")
-    clause_set_id = chain.read("clause_set_head", ["cs-1"]) and "cs-1"
+    clause_set_id = "cs-1"
+    if args.address and int(chain.read("clause_set_head", ["cs-1"]) or 0) >= 1:
+        say("reusing clause set cs-1 on the existing deployment")
+    else:
+        say("registering the clause set")
+        chain.write("register_clause_set",
+                    ["Household contents wording, synthetic edition 1",
+                     policy_url, policy_sha, 365], "register_clause_set")
     record = chain.read("get_clause_set", [clause_set_id, 1])
     say("  clause set %s version 1, definition hash %s"
         % (clause_set_id, record["definition_hash"]))
@@ -393,6 +430,45 @@ def main():
             % withdraw_id)
         say()
 
+    if "d" in wanted:
+        say("## Scenario D - a clause applied past its own stated scope")
+        url, digest = documents[NOTICE_JEWELLERY]
+        open_tx, _ = chain.write(
+            "open_review", [clause_set_id, url, digest, "SYN-0063",
+                            ["Clause 5.4"], [GROUND_JEWELLERY]],
+            "open_review")
+        review_id = chain.read("notice_under_review", [digest])
+        resolve_tx, _ = chain.write("resolve_review", [review_id],
+                                    "resolve_review")
+        review = chain.read("get_review", [review_id])
+        grounds = chain.read("get_grounds", [review_id])
+        # Two readings of this notice are defensible, and the contract is
+        # designed to keep them apart rather than merge them: the clause
+        # reaches the jewellery items but is applied to the whole claim
+        # (OVERBROAD), or a jewellery-only limit does not reach a
+        # whole-claim refusal at all (UNSUPPORTED). What must hold either
+        # way is that the refusal does not stand. Asserting one of the two
+        # would be asserting a model's taste, not the primitive's
+        # guarantee.
+        expect_one_of("verdict", review["verdict"],
+                      ["DENIAL_OVERBROAD", "DENIAL_UNSUPPORTED"])
+        expect_one_of("ground outcome", grounds[0]["outcome"],
+                      ["OVERBROAD", "UNSUPPORTED"])
+        # Overbroad is neither an upholding nor a plain lack of support:
+        # both convenience gates are false and the consumer must read the
+        # verdict itself.
+        expect("is_denial_supported", chain.read(
+            "is_denial_supported", [review_id, "2026-10-17"]), False)
+        expect("is_denial_unsupported", chain.read(
+            "is_denial_unsupported", [review_id, "2026-10-17"]), False)
+        expect("is_consumable", chain.read(
+            "is_consumable", [review_id, "2026-10-17"]), True)
+        say("    clause quote: %s" % grounds[0]["clause_quote"][:160])
+        say("    notice quote: %s" % grounds[0]["notice_quote"][:160])
+        results.append(("D: clause applied too widely", review_id, open_tx,
+                        resolve_tx, review["verdict"]))
+        say()
+
     say("## Summary")
     say()
     say("| Scenario | Review | Open tx | Resolve tx | Stored verdict |")
@@ -407,10 +483,28 @@ def main():
     say("explorer   %s/address/%s" % (EXPLORER, chain.address))
 
     PROOFS.mkdir(parents=True, exist_ok=True)
-    (PROOFS / "live.md").write_text("\n".join(log_lines) + "\n",
-                                    encoding="utf-8")
+    (PROOFS / "live-run.log").write_text("\n".join(log_lines) + "\n",
+                                         encoding="utf-8")
+    # The ledger is what makes the run checkable by someone else: every
+    # transaction it produced, the contract, and the commit the documents
+    # were pinned at. scripts/verify.py reads it back off the network and
+    # writes docs/proofs/live.md from what it finds there.
+    ledger = {
+        "network": "studionet", "chain_id": 61999, "rpc": RPC,
+        "commit": args.commit, "contract": chain.address,
+        "deployer": account.address, "deploy_tx": deploy_tx,
+        "transactions": [{"label": label, "tx": tx}
+                         for label, tx in chain.transactions],
+        "reviews": [{"scenario": row[0], "review_id": row[1],
+                     "verdict": row[4]} for row in results],
+        "documents": {name: {"url": url, "sha256": digest}
+                      for name, (url, digest) in documents.items()},
+    }
+    (PROOFS / "live.json").write_text(
+        json.dumps(ledger, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8")
     say()
-    say("written to docs/proofs/live.md")
+    say("written to docs/proofs/live-run.log and docs/proofs/live.json")
     return 0
 
 

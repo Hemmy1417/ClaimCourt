@@ -28,7 +28,8 @@ from gltest.assertions import tx_execution_succeeded
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "fixtures"
-CONTRACT = "contracts/claimcourt.py"
+# Relative to the contracts directory in gltest.config.yaml.
+CONTRACT = "claimcourt.py"
 
 REF = os.environ.get("CLAIMCOURT_FIXTURE_REF", "main")
 RAW = "https://raw.githubusercontent.com/Hemmy1417/ClaimCourt/%s/fixtures/%s"
@@ -47,6 +48,11 @@ GROUND_UNOCCUPIED = ("the insured address was left unoccupied for more than "
 GROUND_LATE = ("because the notification was late the cover for this claim "
                "ended and no payment is due")
 TODAY = "2026-10-17"
+
+# The deployed contract carries the account it was deployed with, so a
+# write needs only patience: a hosted round is slower than a local one.
+WAIT = {"consensus_max_rotations": 3, "wait_interval": 5000,
+        "wait_retries": 100}
 
 
 def _published(name):
@@ -95,7 +101,7 @@ def clause_set(contract, account):
     url, digest = _published(POLICY)
     receipt = contract.register_clause_set(
         args=["Household contents wording, synthetic edition 1", url, digest,
-              365]).transact(account=account)
+              365]).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
     record = contract.get_clause_set(args=["cs-1", 1]).call()
     assert record["policy_sha256"] == digest
@@ -107,7 +113,7 @@ def _open(contract, account, clause_set_id, notice, refs, grounds,
     url, digest = _published(notice)
     receipt = contract.open_review(
         args=[clause_set_id, url, digest, reference, refs,
-              grounds]).transact(account=account)
+              grounds]).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
     review_id = contract.notice_under_review(args=[digest]).call()
     assert review_id != ""
@@ -130,8 +136,7 @@ def test_deploy_and_public_surface(contract, clause_set):
 def test_a_denial_that_stands(contract, account, clause_set):
     review_id = _open(contract, account, clause_set, NOTICE_UNOCCUPIED,
                       ["Clause 4.2"], [GROUND_UNOCCUPIED], "SYN-0041")
-    receipt = contract.resolve_review(args=[review_id]).transact(
-        account=account)
+    receipt = contract.resolve_review(args=[review_id]).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
     # The receipt is not the proof: a round whose validators disagreed can
     # report success and store nothing. The stored state is the proof.
@@ -156,8 +161,7 @@ def test_a_denial_that_stands(contract, account, clause_set):
 def test_a_denial_the_clause_does_not_support(contract, account, clause_set):
     review_id = _open(contract, account, clause_set, NOTICE_LATE,
                       ["Clause 3.3"], [GROUND_LATE], "SYN-0052")
-    receipt = contract.resolve_review(args=[review_id]).transact(
-        account=account)
+    receipt = contract.resolve_review(args=[review_id]).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
     review = contract.get_review(args=[review_id]).call()
     assert review["status"] == "RESOLVED"
@@ -174,8 +178,7 @@ def test_a_notice_that_addresses_its_reader_is_not_upheld(contract, account,
                                                           clause_set):
     review_id = _open(contract, account, clause_set, NOTICE_DIRECTED,
                       ["Clause 4.2"], [GROUND_UNOCCUPIED], "SYN-0085")
-    receipt = contract.resolve_review(args=[review_id]).transact(
-        account=account)
+    receipt = contract.resolve_review(args=[review_id]).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
     review = contract.get_review(args=[review_id]).call()
     # The notice tells its reader to uphold every ground. Code counted the
@@ -193,11 +196,10 @@ def test_an_unfetchable_document_is_not_a_finding(contract, account,
     url = RAW % (REF, MISSING)
     receipt = contract.open_review(
         args=[clause_set, url, "d" * 64, "SYN-0099", ["Clause 4.2"],
-              [GROUND_UNOCCUPIED]]).transact(account=account)
+              [GROUND_UNOCCUPIED]]).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
     review_id = contract.notice_under_review(args=["d" * 64]).call()
-    receipt = contract.resolve_review(args=[review_id]).transact(
-        account=account)
+    receipt = contract.resolve_review(args=[review_id]).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
     review = contract.get_review(args=[review_id]).call()
     assert review["verdict"] == "RECORD_UNAVAILABLE"
@@ -207,8 +209,7 @@ def test_an_unfetchable_document_is_not_a_finding(contract, account,
     assert contract.is_consumable(args=[review_id, TODAY]).call() is False
     # The recovery path: the opener takes the review back, and the notice is
     # free to be reviewed again at a location that can be fetched.
-    receipt = contract.withdraw_review(args=[review_id]).transact(
-        account=account)
+    receipt = contract.withdraw_review(args=[review_id]).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
     assert contract.get_review(args=[review_id]).call()["status"] \
         == "WITHDRAWN"
