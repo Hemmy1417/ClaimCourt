@@ -334,7 +334,7 @@ reasons, and a published rule the reasons cite.
 | Gate | Command | Result |
 |---|---|---|
 | source invariants | `python scripts/preflight.py` | 131/131 |
-| Direct Mode | `pytest tests/direct -q` | 176 passed, 0 failed, 0 skipped |
+| Direct Mode | `pytest tests/direct -q` | 183 passed, 0 failed, 0 skipped |
 | GenVM AST lint | `genvm-lint lint contracts/claimcourt.py` | passed, 3 checks |
 | GenVM SDK validation | `genvm-lint check contracts/claimcourt.py` | passed, 28 methods (20 view, 8 write) |
 | mutation sweep | `python scripts/mutate.py` | 24/29 killed; the 5 survivors are argued equivalent in [docs/TESTING.md](docs/TESTING.md) |
@@ -355,7 +355,7 @@ cd ClaimCourt
 py -3.12 -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -r requirements-test.txt
 PYTHONUTF8=1 ./.venv/Scripts/python.exe scripts/preflight.py       # 131/131
-PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pytest tests/direct -q  # 176 passed
+PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pytest tests/direct -q  # 183 passed
 
 # POSIX
 python3.12 -m venv .venv && source .venv/bin/activate
@@ -375,7 +375,7 @@ document, verdict and gate back off Studionet and rewrites
 
 ```text
 contracts/claimcourt.py              the one deployable contract
-tests/direct/                        176 tests, no network
+tests/direct/                        183 tests, no network
 tests/integration/                   hosted Studionet suite
 fixtures/                            synthetic wording and notices
 scripts/preflight.py                 source invariants, no dependencies

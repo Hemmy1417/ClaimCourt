@@ -92,7 +92,7 @@ review.
 | Gate | Result |
 |---|---|
 | source invariants (`scripts/preflight.py`) | 131/131 |
-| Direct Mode (`pytest tests/direct -q`) | 176 passed, 0 failed, 0 skipped |
+| Direct Mode (`pytest tests/direct -q`) | 183 passed, 0 failed, 0 skipped |
 | pickling checks | on, passing |
 | GenVM AST lint | passed, 3 checks |
 | GenVM SDK validation | passed, 28 methods (20 view, 8 write) |
@@ -202,6 +202,6 @@ for and I will measure the text for them.
 
 ## Portal description (under 1000 characters)
 
-ClaimCourt is a standalone GenLayer Intelligent Contract that reviews a refusal against the rule it cites. A decider publishes wording, bound to the hash of its exact bytes. Anyone opens a review of a refusal notice, also hash-bound, naming each clause cited and each ground given. In one consensus round every validator fetches and hashes both documents itself and judges whether the clause as written reaches that ground, re-checking every quote against the bytes it verified, so nothing invented survives. Deterministic code owns authorisation, versioning, precedence and every reliance gate, and names the verdict: supported, unsupported, overbroad, miscited, misstated, inconclusive or unavailable. A notice that instructs its reader cannot be upheld. Consumers read one boolean, and a per-clause record accumulates. Verified with 176 Direct Mode tests, GenVM validation, a mutation sweep, a live suite, and a FINALIZED Studionet deployment byte-identical to source.
+ClaimCourt is a standalone GenLayer Intelligent Contract that reviews a refusal against the rule it cites. A decider publishes wording, bound to the hash of its exact bytes. Anyone opens a review of a refusal notice, also hash-bound, naming each clause cited and each ground given. In one consensus round every validator fetches and hashes both documents itself and judges whether the clause as written reaches that ground, re-checking every quote against the bytes it verified, so nothing invented survives. Deterministic code owns authorisation, versioning, precedence and every reliance gate, and names the verdict: supported, unsupported, overbroad, miscited, misstated, inconclusive or unavailable. A notice that instructs its reader cannot be upheld. Consumers read one boolean, and a per-clause record accumulates. Verified with 183 Direct Mode tests, GenVM validation, a mutation sweep, a live suite, and a FINALIZED Studionet deployment byte-identical to source.
 
 (971 characters.)

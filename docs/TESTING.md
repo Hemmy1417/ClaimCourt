@@ -5,7 +5,7 @@ Three gates, and a fourth that tests the tests.
 | Gate | Command | Result |
 |---|---|---|
 | source invariants | `python scripts/preflight.py` | 131/131 |
-| Direct Mode | `pytest tests/direct -q` | 176 passed |
+| Direct Mode | `pytest tests/direct -q` | 183 passed |
 | GenVM lint and SDK validation | `genvm-lint lint contracts/claimcourt.py` then `genvm-lint check contracts/claimcourt.py` | lint passed (3 checks); validation passed, 28 methods (20 view, 8 write) |
 | mutation sweep | `python scripts/mutate.py` | 24/29 killed, 5 equivalent (below) |
 
@@ -39,9 +39,10 @@ seeded genvm-universal-v0.3.0-rc7.tar.xz from genvm-runners-all.tar.xz:
 ```
 
 Without that step every Direct Mode test would error at import - a red build
-that says nothing about the contract. The run that proved it:
-131/131, 176 passed, lint passed, validation passed with 28 methods, in
-3m19s.
+that says nothing about the contract. That first run: 131/131, 176 passed
+(the suite was 176 tests at that commit), lint passed, validation passed
+with 28 methods, in 3m19s. The next run, on a warm cache and the full suite:
+131/131, **183 passed in 5.65s**, both lint and validation green.
 
 Environment used for the runs above: Windows, Python 3.12.2,
 `genlayer-test` 0.29.2, `genlayer-py` 0.16.3, `genvm-linter` 0.11.1rc2,
@@ -95,7 +96,7 @@ same bytes the canonical deployment holds.
 
 Result, 2026-10-17, against commit `f499f44` in a clone made with
 `gh repo clone` and a virtualenv built from `requirements-test.txt`:
-preflight **131/131**, Direct Mode **176 passed**, GenVM lint **passed**,
+preflight **131/131**, Direct Mode **183 passed**, GenVM lint **passed**,
 SDK validation **passed** (28 methods), and `scripts/verify.py` **all
 checks passed** - the live evidence re-checks from a fresh checkout with no
 keys. Before the workaround above was committed, the same clone produced
@@ -116,6 +117,7 @@ one the first run fetches it.
 | `tests/direct/test_verdicts.py` | 26 | every verdict, precedence across several grounds, retry to a settled reading, round exhaustion, unavailable and substituted and oversized and empty documents, the directed-text ceiling, terminal replay, the receipt, staleness, revocation, supersession and lineage, counters moving exactly once |
 | `tests/direct/test_hardening.py` | 44 | hostile panel output: unusable answers, wrong types, bool-as-int, unknown enums, missing and duplicate and extra fields, fence and prose recovery, enum normalisation, invented quotes, quotes too short to mean anything, quotes from the wrong document, oversized quotes and reasoning, and the marker count |
 | `tests/direct/test_validators.py` | 56 | the contract's own validator closure, replayed through `direct_vm.run_validator` against forged leader results - and agreeing with honest ones |
+| `tests/direct/test_gate_units.py` | 7 | the gate rules the validator comparison reaches first: a row contradicting its own fields, a finding on a round that did not read, a panel state contradicting the documents, a verdict derived from an unread round or an unexamined document, and a second record against a review that already counted |
 
 Nothing monkeypatches `resolve_review`. The mocks sit on the two document
 fetches and the panel call; everything between them is the contract's code.
