@@ -337,13 +337,14 @@ reasons, and a published rule the reasons cite.
 | Direct Mode | `pytest tests/direct -q` | 183 passed, 0 failed, 0 skipped |
 | GenVM AST lint | `genvm-lint lint contracts/claimcourt.py` | passed, 3 checks |
 | GenVM SDK validation | `genvm-lint check contracts/claimcourt.py` | passed, 28 methods (20 view, 8 write) |
-| mutation sweep | `python scripts/mutate.py` | 24/29 killed; the 5 survivors are argued equivalent in [docs/TESTING.md](docs/TESTING.md) |
+| mutation sweep | `python scripts/mutate.py` | **29/29 killed**, no survivors |
 | hosted integration | `CLAIMCOURT_FIXTURE_REF=0ddcd67 gltest tests/integration -v -s --network studionet` | 5 passed in 310.74 s, real consensus, not `--leader-only` |
 | live evidence, re-read | `python scripts/verify.py` | all checks passed; read-only, no keys |
 | CI, every push | `.github/workflows/gates.yml` | the offline gates on ubuntu, green |
 
-What each suite covers, the five mutation survivors, the clean-clone gate and
-the one committed Windows workaround: [docs/TESTING.md](docs/TESTING.md).
+What each suite covers, what the mutation sweep breaks, the clean-clone gate
+and the one committed Windows workaround:
+[docs/TESTING.md](docs/TESTING.md).
 
 ## Reviewer fast path
 

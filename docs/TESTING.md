@@ -7,7 +7,7 @@ Three gates, and a fourth that tests the tests.
 | source invariants | `python scripts/preflight.py` | 131/131 |
 | Direct Mode | `pytest tests/direct -q` | 183 passed |
 | GenVM lint and SDK validation | `genvm-lint lint contracts/claimcourt.py` then `genvm-lint check contracts/claimcourt.py` | lint passed (3 checks); validation passed, 28 methods (20 view, 8 write) |
-| mutation sweep | `python scripts/mutate.py` | 24/29 killed, 5 equivalent (below) |
+| mutation sweep | `python scripts/mutate.py` | **29/29 killed**, no survivors |
 
 Two more gates run against the network:
 
@@ -125,77 +125,74 @@ fetches and the panel call; everything between them is the contract's code.
 ## The mutation sweep
 
 A green suite says the contract passes its tests. It does not say the tests
-would fail if the contract were wrong. `scripts/mutate.py` removes one
-guard at a time in a scratch copy and runs the whole Direct Mode suite
-against it. 24 of 29 mutations were caught. The five that were not are
-below, each with the reason - two of them are redundant defences, three are
-unreachable by construction, and none of them is a hole where a wrong
-answer could be stored.
+would fail if the contract were wrong. `scripts/mutate.py` removes one guard
+at a time in a scratch copy and runs the whole Direct Mode suite against it.
+A mutation that still passes is a hole in the tests, and is reported as
+SURVIVED.
 
-### 1. `gate: the leader names its own outcome`
+**29 mutations, 29 killed, no survivors.**
 
-Removes the check in `_parse_payload` that each row's `outcome` is the one
-`_ground_outcome` derives from that row's own fields.
+What gets broken, and what notices:
 
-Survives because `_first_difference` compares `clause_located`,
-`ground_stated_in_notice`, `supported`, `scope_exceeded` **and** `outcome`
-against the validator's own row. The validator's own row always has a
-consistent outcome, so an inconsistent forged row differs on at least one
-compared field and is rejected there. `test_validators.py` covers both
-halves: `test_a_forged_conclusion_is_rejected` and
-`test_a_wrongly_typed_or_unknown_row_field_is_rejected` (which includes an
-unknown outcome, and a mismatched `supported`).
+| Mutation | Caught by |
+|---|---|
+| any quote is accepted as grounded | `test_an_invented_clause_quote_cannot_locate_a_clause`, `test_an_invented_quote_is_rejected_even_when_the_outcome_matches` |
+| a one-word quote counts | `test_a_quote_too_short_to_mean_anything_does_not_ground` |
+| an integer passes for a boolean | the type matrix in `test_hardening.py` and `test_validators.py` |
+| an unknown `supported` value is kept | the same matrices |
+| the leader names its own outcome | `test_a_row_whose_outcome_contradicts_its_own_fields_is_refused` |
+| an unread round may carry findings | `test_a_round_that_did_not_read_cannot_carry_a_finding` |
+| the payload need not be bound to this review | `test_a_rebound_payload_is_rejected` |
+| the panel state need not match the documents | `test_a_panel_state_that_contradicts_the_documents_is_refused` |
+| a notice may address its reader and still be upheld | `test_a_notice_that_addresses_its_reader_cannot_be_upheld` |
+| an unread round is treated as a reading | `test_an_unread_round_is_never_a_finding` |
+| a misstated ground is outranked | `test_a_misstated_ground_outranks_a_miscited_clause` |
+| an undecided ground is upheld | `test_an_unclear_reading_is_inconclusive_and_retryable` |
+| an unavailable document is a reading | `test_a_document_that_was_not_examined_is_never_a_finding` |
+| the committed hash is not checked | `test_a_substituted_document_is_not_the_document` |
+| the size cap is removed | `test_an_oversized_document_is_refused_before_it_is_read` |
+| any location is admitted | the URL admission matrix in `test_lifecycle.py` |
+| everything the leader says is agreed with | the true-controls and forgeries in `test_validators.py` |
+| per-ground findings are not compared | `test_a_forged_conclusion_is_rejected` |
+| a leader failure is always believed | `test_a_transient_claim_is_rejected_when_this_node_succeeds` |
+| the document statuses are not compared | `test_claiming_a_document_was_read_when_it_cannot_be_fetched` |
+| a resolved review can be read again | `test_a_resolved_review_is_terminal` |
+| rounds never run out | `test_rounds_run_out_and_the_review_settles_unsettled` |
+| anyone may publish a clause version | `test_only_the_owner_publishes_or_revokes` |
+| anyone may withdraw another party's review | `test_a_withdrawn_review_releases_its_notice` |
+| the same notice can be reviewed twice | `test_the_same_notice_is_reviewed_once` |
+| a retried review counts twice | `test_the_same_review_cannot_be_counted_twice` |
+| an unsettled review is consumable | the reliance assertions across `test_verdicts.py` |
+| a verdict never goes stale | `test_a_verdict_goes_stale_after_its_window` |
+| a revoked clause version blocks nothing | `test_revoking_the_version_blocks_its_reviews` |
 
-The re-derivation still matters where no test can reach it: `_run_round`
-parses the **ratified** payload again after consensus, with no validator to
-compare against. Keeping it costs one comparison.
+### The five that used to survive
 
-### 2. `gate: an unread round may carry findings`
+An earlier sweep killed 24 of 29. The five that survived were all rules the
+validator's field-by-field comparison reaches first: remove the rule, and a
+forged payload still fails on `_first_difference` before the missing check
+would have mattered, so no end-to-end assertion changed.
 
-Removes the check that on a round where the panel did not answer, every row
-is exactly the shape an unread round is allowed to have.
+That is a real argument, but it is an argument rather than a test, and it
+does not hold where those rules actually bite: the ratified payload is parsed
+once more after consensus, in `_run_round`, with no validator left to compare
+against. `tests/direct/test_gate_units.py` now calls `_parse_payload`,
+`_derive_verdict` and `_record_outcome` directly with staged inputs, so each
+rule is responsible for its own failure. The same five mutations are now
+killed:
 
-Survives for the same reason: on such a round the validator's own rows are
-all `UNDECIDED` with no quotes, so any forged finding differs on a compared
-field. `test_a_forged_panel_state_is_rejected` and
-`test_claiming_a_document_is_unavailable_when_it_can_be_read` exercise the
-pair of states involved.
+| Rule | Why it survived before | Test that kills it now |
+|---|---|---|
+| a row's `outcome` must be the one its own fields derive | `outcome` is also compared against the validator's own row | `test_a_row_whose_outcome_contradicts_its_own_fields_is_refused` |
+| an unread round's rows have one permitted shape | every such row differs from the validator's own `UNDECIDED` row | `test_a_round_that_did_not_read_cannot_carry_a_finding` |
+| `panel_state` must match the document statuses | all three fields are compared directly | `test_a_panel_state_that_contradicts_the_documents_is_refused` |
+| an unread round is never a finding | unread rows are `UNDECIDED`, so the later branch returns the same verdict | `test_an_unread_round_is_never_a_finding` |
+| a review contributes to a clause's record once | the counters sit behind a terminal-state guard that no public path can pass twice | `test_the_same_review_cannot_be_counted_twice` |
 
-### 3. `gate: the panel state need not match the documents`
-
-Removes the consistency check between `panel_state` and the two document
-statuses.
-
-Survives because all three fields are in `DECISION_FIELDS` and are compared
-directly. Covered by `test_a_forged_panel_state_is_rejected` and
-`test_claiming_a_document_was_read_when_it_cannot_be_fetched`.
-
-### 4. `verdict: an unread round is treated as a reading`
-
-Removes the `panel_state != PANEL_READ -> INCONCLUSIVE` branch from
-`_derive_verdict`.
-
-Survives because the two routes coincide: when the panel did not read,
-every row is `UNDECIDED`, and the later `GROUND_UNDECIDED in outcomes`
-branch returns `INCONCLUSIVE` anyway. An unavailable document is caught by
-the branch before either. The verdict is the same by either path, which is
-why no assertion changes - the explicit branch exists so the rule is
-readable, not because the fallback is missing.
-
-### 5. `record: a retried review counts twice`
-
-Removes the `counted` flag that stops a review contributing to the clause
-record more than once.
-
-Survives because the counters sit inside the terminal branch of
-`_record_outcome`, and both entry points - `resolve_review` and
-`retry_review` - reject a review whose status is already `RESOLVED`
-(`test_a_resolved_review_is_terminal`,
-`test_rounds_run_out_and_the_review_settles_unsettled`). There is no path
-that reaches the counters twice for one review, so the flag is belt and
-braces. `test_an_unclear_reading_is_inconclusive_and_retryable` pins the
-behaviour that matters: a review that is read twice and settles once is
-counted once.
+Each of those tests has a true-control beside it, so a rejection cannot be a
+staging error, and `module` is resolved from the deployed class rather than
+by name - which is why the sweep, loading a patched copy under its own
+module name, exercises them too.
 
 ### Re-running it
 
