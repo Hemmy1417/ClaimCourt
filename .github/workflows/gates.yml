@@ -1,0 +1,50 @@
+name: gates
+
+# The gates that need no network and no keys: source invariants, Direct Mode,
+# and GenVM lint plus SDK validation. The Studionet integration suite is
+# deliberately not here - it needs a funded signer and it creates real
+# deployments, which is not something a push should do.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache the GenVM runner bundles
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/gltest-direct
+            ~/.cache/genvm-linter
+          key: genvm-v0.3.0-rc7-${{ hashFiles('requirements-test.txt') }}
+
+      - name: Install the pinned toolchain
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements-test.txt
+
+      - name: Seed the runner bundle
+        run: python scripts/fetch_genvm_bundle.py
+
+      - name: Source invariants
+        run: python scripts/preflight.py
+
+      - name: Direct Mode
+        run: pytest tests/direct -q
+
+      - name: GenVM AST lint
+        run: genvm-lint lint contracts/claimcourt.py
+
+      - name: GenVM SDK validation
+        run: genvm-lint check contracts/claimcourt.py
