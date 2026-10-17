@@ -355,7 +355,10 @@ def main():
         say()
 
     PROOFS.mkdir(parents=True, exist_ok=True)
-    (PROOFS / "live.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # newline="" keeps this byte-stable across platforms, so re-running the
+    # verification does not produce a line-ending diff.
+    (PROOFS / "live.md").write_text("\n".join(lines) + "\n",
+                                    encoding="utf-8", newline="")
     if failures:
         print("\n%d check(s) failed" % len(failures))
         return 1

@@ -68,6 +68,14 @@ The clone's `contracts/claimcourt.py` carries git blob
 `c2efcd3441e4271fca6273b66dd2e9bd7a2e4b288a2ef05faaa98e52dc346ed9` - the
 same bytes the canonical deployment holds.
 
+Result, 2026-10-17, against commit `f499f44` in a clone made with
+`gh repo clone` and a virtualenv built from `requirements-test.txt`:
+preflight **131/131**, Direct Mode **176 passed**, GenVM lint **passed**,
+SDK validation **passed** (28 methods), and `scripts/verify.py` **all
+checks passed** - the live evidence re-checks from a fresh checkout with no
+keys. Before the workaround above was committed, the same clone produced
+176 setup errors.
+
 A fresh virtualenv resolves exactly the pinned `genlayer-py` 0.16.3,
 `genlayer-test` 0.29.2, `genvm-linter` 0.11.1rc2 and pytest 9.1.1. One
 environment prerequisite is not in `requirements-test.txt` and cannot be:
