@@ -7,6 +7,10 @@
 <p align="center">A refusal gave reasons and cited a rule. This decides whether the rule, as written, says what the refusal claims.<br>
 A standalone GenLayer Intelligent Contract. No frontend, no token.</p>
 
+<p align="center">
+  <a href="https://github.com/Hemmy1417/ClaimCourt/actions/workflows/gates.yml"><img src="https://github.com/Hemmy1417/ClaimCourt/actions/workflows/gates.yml/badge.svg" alt="gates"></a>
+</p>
+
 ## Thesis
 
 Refusals are written by the party that benefits from them, and they cite
@@ -336,6 +340,7 @@ reasons, and a published rule the reasons cite.
 | mutation sweep | `python scripts/mutate.py` | 24/29 killed; the 5 survivors are argued equivalent in [docs/TESTING.md](docs/TESTING.md) |
 | hosted integration | `CLAIMCOURT_FIXTURE_REF=0ddcd67 gltest tests/integration -v -s --network studionet` | 5 passed in 310.74 s, real consensus, not `--leader-only` |
 | live evidence, re-read | `python scripts/verify.py` | all checks passed; read-only, no keys |
+| CI, every push | `.github/workflows/gates.yml` | the offline gates on ubuntu, green |
 
 What each suite covers, the five mutation survivors, the clean-clone gate and
 the one committed Windows workaround: [docs/TESTING.md](docs/TESTING.md).

@@ -145,78 +145,60 @@ pytest tests/direct -q
 
 No network, no keys, no GenLayer account.
 
-## Portal form, field by field
+## Portal submission
 
-No addresses, hashes, identifiers or commands appear in any text field below; the contract address belongs only in the validated contract-link field.
+This is an **Intelligent Contract** contribution, not a Project. There is no
+app, no frontend and no user journey: the deliverable is one deployed
+contract and the evidence that it does what it says.
 
-**Title** (the form's optional title, filled)
-
-```text
-ClaimCourt - review of a stated denial against the rule it cites
-```
-
-**One-liner** (limit 180, used 173)
-
-```text
-Reviews whether a refusal's stated reasons are supported by the policy clauses they cite, under validator consensus, and records a typed verdict other contracts can rely on.
-```
-
-**Description** (limit 1000) - the block under "Portal description" below, 973 characters.
-
-**Verification outcome** (limit 500, used 450)
-
-```text
-Open the contract on the explorer and read any review: it stores the verdict, each ground's outcome, and the sentences quoted from both documents. The wording and the notice are each bound to the hash of their exact bytes, so anyone can fetch them, hash them, and confirm what was read. A read-only script in the repository re-queries every transaction and re-reads every stored result, and the deployed contract decodes back to the committed source.
-```
-
-**How to use it** - seven steps, each with its heading filled:
-
-1. **Publish the wording**
-
-   The decider publishes the rule document at a stable public location and registers it. That freezes the version and its hash, so a later edit cannot change what a past review was judged against.
-
-2. **Bind the notice**
-
-   Whoever opens the review takes the refusal notice exactly as issued and binds it to the hash of its own bytes. Neither side can swap the text afterwards.
-
-3. **Name what is disputed**
-
-   The review lists each clause the notice cites and each ground it gave, in the notice's own terms. Nothing else about the claim is submitted.
-
-4. **Open the review**
-
-   Opening it fixes the rule version, both documents and the grounds. Anyone may open one: the party whose decision is under review does not get to decide whether it is reviewed.
-
-5. **Let the validators read**
-
-   Resolving runs one consensus round. Every validator fetches and hashes both documents itself, locates each cited clause and judges whether that clause, as written, reaches the ground the notice relied on.
-
-6. **Read the verdict**
-
-   The contract records a typed verdict, an outcome for each ground, and the quotes every validator re-checked against the bytes it verified. Code, not the model, names the verdict.
-
-7. **Rely on it, or wait**
-
-   A downstream system reads one boolean gate. It stays false while anything is unsettled, stale, withdrawn, or made on a rule version that has since been withdrawn.
-
-**Contract link** (validated field, badges automatically)
+The portal validates one evidence URL specifically as
+`genlayer-explorer-contract`. For a Studionet contract that is the Explorer
+**address** page - not the repository, not a transaction, not the Studio
+import link:
 
 ```text
 https://explorer-studio.genlayer.com/address/0x78188E7554564606401b7f3B368076D08e0ef63E
 ```
 
-**Logo** - `docs/assets/claimcourt-mark-512.png`, 512x512 PNG, ready to upload.
+Supporting evidence, where the form allows more than one link:
 
-**Evidence**
-
-| Type | URL |
+| What | URL |
 |---|---|
-| GitHub repository (required) | https://github.com/Hemmy1417/ClaimCourt |
-| GenLayer Explorer contract | https://explorer-studio.genlayer.com/address/0x78188E7554564606401b7f3B368076D08e0ef63E |
-| Other - deployment evidence | https://github.com/Hemmy1417/ClaimCourt/blob/main/docs/DEPLOYMENT.md |
-| Other - live run, re-read off chain | https://github.com/Hemmy1417/ClaimCourt/blob/main/docs/proofs/live.md |
+| Repository | https://github.com/Hemmy1417/ClaimCourt |
+| Deployment evidence | https://github.com/Hemmy1417/ClaimCourt/blob/main/docs/DEPLOYMENT.md |
+| Live run, re-read off chain | https://github.com/Hemmy1417/ClaimCourt/blob/main/docs/proofs/live.md |
 
-**Contribution date** - the day you submit, not the build date.
+**Title**
+
+```text
+ClaimCourt - review of a stated denial against the rule it cites
+```
+
+**Description** - the measured block under "Portal description" below, 971
+characters.
+
+**One-liner**, if the form asks for one (173 characters):
+
+```text
+Reviews whether a refusal's stated reasons are supported by the policy clauses they cite, under validator consensus, and records a typed verdict other contracts can rely on.
+```
+
+**Verification outcome**, if the form asks for one (450 characters):
+
+```text
+Open the contract on the explorer and read any review: it stores the verdict, each ground's outcome, and the sentences quoted from both documents. The wording and the notice are each bound to the hash of their exact bytes, so anyone can fetch them, hash them, and confirm what was read. A read-only script in the repository re-queries every transaction and re-reads every stored result, and the deployed contract decodes back to the committed source.
+```
+
+No addresses, hashes, identifiers or shell commands appear in any text
+field; the contract address belongs only in the validated evidence URL.
+
+**Contribution date** is the day you submit, not the build date.
+
+A 512px raster of the mark is at `docs/assets/claimcourt-mark-512.png` if the
+form asks for an image. The seven-step "how to use it" walkthrough and the
+live-site evidence row that a Project submission wants do not apply here.
+If the form shows fields this section does not cover, tell me what it asks
+for and I will measure the text for them.
 
 ## Portal description (under 1000 characters)
 

@@ -18,6 +18,31 @@ Two more gates run against the network:
 
 Both are recorded in `docs/DEPLOYMENT.md` and `docs/proofs/live.md`.
 
+## CI
+
+`.github/workflows/gates.yml` runs preflight, Direct Mode, AST lint and SDK
+validation on `ubuntu-latest` for every push and pull request. The Studionet
+integration suite is deliberately excluded: it needs a funded signer and it
+creates real deployments, which is not something a push should do.
+
+The first run was green, and it proved why `scripts/fetch_genvm_bundle.py`
+is there. `genlayer-test` asks GitHub for `genvm-universal.tar.xz`; the
+release ships that asset as `genvm-runners-all.tar.xz`. On a warm cache
+nothing notices. On a clean runner:
+
+```text
+trying .../v0.3.0-rc7/genvm-universal.tar.xz
+  not published under that name (404)
+trying .../v0.3.0-rc7/genvm-runners-all.tar.xz
+seeded genvm-universal-v0.3.0-rc7.tar.xz from genvm-runners-all.tar.xz:
+134842512 bytes, 19 entries
+```
+
+Without that step every Direct Mode test would error at import - a red build
+that says nothing about the contract. The run that proved it:
+131/131, 176 passed, lint passed, validation passed with 28 methods, in
+3m19s.
+
 Environment used for the runs above: Windows, Python 3.12.2,
 `genlayer-test` 0.29.2, `genlayer-py` 0.16.3, `genvm-linter` 0.11.1rc2,
 pytest 9.1.1. `genvm-linter` 0.11.0 cannot validate against the current
