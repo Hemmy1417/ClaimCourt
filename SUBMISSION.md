@@ -145,6 +145,79 @@ pytest tests/direct -q
 
 No network, no keys, no GenLayer account.
 
+## Portal form, field by field
+
+No addresses, hashes, identifiers or commands appear in any text field below; the contract address belongs only in the validated contract-link field.
+
+**Title** (the form's optional title, filled)
+
+```text
+ClaimCourt - review of a stated denial against the rule it cites
+```
+
+**One-liner** (limit 180, used 173)
+
+```text
+Reviews whether a refusal's stated reasons are supported by the policy clauses they cite, under validator consensus, and records a typed verdict other contracts can rely on.
+```
+
+**Description** (limit 1000) - the block under "Portal description" below, 973 characters.
+
+**Verification outcome** (limit 500, used 450)
+
+```text
+Open the contract on the explorer and read any review: it stores the verdict, each ground's outcome, and the sentences quoted from both documents. The wording and the notice are each bound to the hash of their exact bytes, so anyone can fetch them, hash them, and confirm what was read. A read-only script in the repository re-queries every transaction and re-reads every stored result, and the deployed contract decodes back to the committed source.
+```
+
+**How to use it** - seven steps, each with its heading filled:
+
+1. **Publish the wording**
+
+   The decider publishes the rule document at a stable public location and registers it. That freezes the version and its hash, so a later edit cannot change what a past review was judged against.
+
+2. **Bind the notice**
+
+   Whoever opens the review takes the refusal notice exactly as issued and binds it to the hash of its own bytes. Neither side can swap the text afterwards.
+
+3. **Name what is disputed**
+
+   The review lists each clause the notice cites and each ground it gave, in the notice's own terms. Nothing else about the claim is submitted.
+
+4. **Open the review**
+
+   Opening it fixes the rule version, both documents and the grounds. Anyone may open one: the party whose decision is under review does not get to decide whether it is reviewed.
+
+5. **Let the validators read**
+
+   Resolving runs one consensus round. Every validator fetches and hashes both documents itself, locates each cited clause and judges whether that clause, as written, reaches the ground the notice relied on.
+
+6. **Read the verdict**
+
+   The contract records a typed verdict, an outcome for each ground, and the quotes every validator re-checked against the bytes it verified. Code, not the model, names the verdict.
+
+7. **Rely on it, or wait**
+
+   A downstream system reads one boolean gate. It stays false while anything is unsettled, stale, withdrawn, or made on a rule version that has since been withdrawn.
+
+**Contract link** (validated field, badges automatically)
+
+```text
+https://explorer-studio.genlayer.com/address/0x78188E7554564606401b7f3B368076D08e0ef63E
+```
+
+**Logo** - `docs/assets/claimcourt-mark-512.png`, 512x512 PNG, ready to upload.
+
+**Evidence**
+
+| Type | URL |
+|---|---|
+| GitHub repository (required) | https://github.com/Hemmy1417/ClaimCourt |
+| GenLayer Explorer contract | https://explorer-studio.genlayer.com/address/0x78188E7554564606401b7f3B368076D08e0ef63E |
+| Other - deployment evidence | https://github.com/Hemmy1417/ClaimCourt/blob/main/docs/DEPLOYMENT.md |
+| Other - live run, re-read off chain | https://github.com/Hemmy1417/ClaimCourt/blob/main/docs/proofs/live.md |
+
+**Contribution date** - the day you submit, not the build date.
+
 ## Portal description (under 1000 characters)
 
 ClaimCourt is a standalone GenLayer Intelligent Contract that reviews a refusal against the rule it cites. A decider publishes wording, bound to the sha256 of its exact bytes. Anyone opens a review of a refusal notice, also hash-bound, naming each clause cited and each ground given. In one consensus round every validator fetches and hashes both documents itself and judges whether the clause as written reaches that ground, re-checking every quote against the bytes it verified, so nothing invented survives. Deterministic code owns authorisation, versioning, precedence and every reliance gate, and names the verdict: supported, unsupported, overbroad, miscited, misstated, inconclusive or unavailable. A notice that instructs its reader cannot be upheld. Consumers read one boolean, and a per-clause record accumulates. Verified with 176 Direct Mode tests, GenVM validation, a mutation sweep, a live suite, and a FINALIZED Studionet deployment byte-identical to source.
