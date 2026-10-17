@@ -307,13 +307,25 @@ Everything each gate actually printed is in [docs/TESTING.md](docs/TESTING.md),
 ```bash
 git clone https://github.com/Hemmy1417/ClaimCourt.git
 cd ClaimCourt
-python -m venv .venv && .venv/Scripts/activate      # or source .venv/bin/activate
+
+# Windows (the environment these results come from)
+py -3.12 -m venv .venv
+./.venv/Scripts/python.exe -m pip install -r requirements-test.txt
+PYTHONUTF8=1 ./.venv/Scripts/python.exe scripts/preflight.py      # 131/131
+PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pytest tests/direct -q # 176 passed
+
+# POSIX
+python3.12 -m venv .venv && source .venv/bin/activate
 python -m pip install -r requirements-test.txt
 python scripts/preflight.py
 pytest tests/direct -q
 ```
 
-No network, no keys and no GenLayer account are needed for any of that. To
+No network, no keys and no GenLayer account are needed for any of that, once
+the GenVM runner bundle is cached (both `gltest` and `genvm-linter` fetch it
+into `~/.cache/` on first use). `tests/direct/conftest.py` carries one
+Windows-only workaround for a `gltest` loader bug, explained in
+[docs/TESTING.md](docs/TESTING.md); it does not touch the contract. To
 read what the live run did instead of running it, open
 [docs/proofs/live.md](docs/proofs/live.md).
 

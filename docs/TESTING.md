@@ -22,8 +22,58 @@ Environment used for the runs above: Windows, Python 3.12.2,
 `genlayer-test` 0.29.2, `genlayer-py` 0.16.3, `genvm-linter` 0.11.1rc2,
 pytest 9.1.1. `genvm-linter` 0.11.0 cannot validate against the current
 runner bundle format, which is why the version is pinned in
-`requirements-test.txt`. No host workaround was needed: Direct Mode ran
-natively, with `check_pickling` on.
+`requirements-test.txt`. `check_pickling` is on for every Direct Mode test.
+
+## One host workaround, committed and scoped
+
+Direct Mode does **not** run natively on Windows with `gltest` 0.29.2. Its
+loader writes the transaction message to a temp file, binds that file to
+fd 0 with `dup2`, closes its own descriptor and then unlinks the path.
+POSIX allows unlinking a file another descriptor still references; Windows
+does not, so contract loading dies with
+
+```text
+PermissionError: [WinError 32] The process cannot access the file because
+it is being used by another process
+```
+
+before any contract code runs - 176 setup errors, zero of them about this
+contract.
+
+`tests/direct/conftest.py` wraps the loader's own helper so that one failed
+cleanup is tolerated, and restores `os.unlink` immediately afterwards. It is
+guarded by `sys.platform != "win32"`, so it does nothing on Linux or macOS.
+The contract is not involved and not modified.
+
+It is **committed**, deliberately: an uncommitted local shim would mean the
+suite only passes on one machine, and the clean-clone gate below exists to
+catch exactly that. It was caught that way - an earlier version of this
+document claimed Direct Mode ran natively, because the `gltest` install on
+the build machine had been patched by hand at some point to tolerate the
+same unlink. A fresh virtualenv from `requirements-test.txt` proved
+otherwise.
+
+## Clean-clone gate
+
+```bash
+gh repo clone Hemmy1417/ClaimCourt /tmp/cc-clean && cd /tmp/cc-clean
+py -3.12 -m venv .venv && ./.venv/Scripts/python.exe -m pip install -r requirements-test.txt
+PYTHONUTF8=1 ./.venv/Scripts/python.exe scripts/preflight.py
+PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pytest tests/direct -q
+PYTHONUTF8=1 ./.venv/Scripts/genvm-lint.exe lint contracts/claimcourt.py
+```
+
+The clone's `contracts/claimcourt.py` carries git blob
+`bd2ab2f0ec2ec905482d49b731a5716abdc81f81` and sha256
+`c2efcd3441e4271fca6273b66dd2e9bd7a2e4b288a2ef05faaa98e52dc346ed9` - the
+same bytes the canonical deployment holds.
+
+A fresh virtualenv resolves exactly the pinned `genlayer-py` 0.16.3,
+`genlayer-test` 0.29.2, `genvm-linter` 0.11.1rc2 and pytest 9.1.1. One
+environment prerequisite is not in `requirements-test.txt` and cannot be:
+both `gltest` and `genvm-linter` download a GenVM runner bundle into
+`~/.cache/` on first use. On a warm cache the gates run offline; on a cold
+one the first run fetches it.
 
 ## What the Direct Mode suite covers
 
