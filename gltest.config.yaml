@@ -1,0 +1,26 @@
+# Networks for the committed test suites.
+#
+# tests/direct/ needs nothing here: Direct Mode runs the contract in this
+# process with every nondeterministic edge mocked.
+#
+# tests/integration/ runs against hosted Studionet. The block below is left
+# empty on purpose: gltest interpolates ${VAR} at config load, so a committed
+# `accounts: ["${KEY}"]` breaks the offline suite for anyone without that
+# variable. To run the live suite with your own signer, paste into
+# `studionet:` below:
+#
+#   studionet:
+#     accounts: ["${CLAIMCOURT_SIGNER_KEY}"]
+#     from_account: "${CLAIMCOURT_SIGNER_KEY}"
+#
+# Without it, the suite generates a throwaway account and funds it from the
+# Studionet faucet - see docs/DEPLOYMENT.md.
+
+networks:
+  default: localnet
+  localnet:
+  studionet: {}
+
+paths:
+  contracts: contracts
+  artifacts: artifacts

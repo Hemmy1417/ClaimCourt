@@ -1,0 +1,4 @@
+# The contract itself has no Python dependencies: the GenVM runner pinned in
+# the Depends header of contracts/claimcourt.py supplies the SDK, and the
+# contract imports only hashlib, json and dataclasses from the standard
+# library.

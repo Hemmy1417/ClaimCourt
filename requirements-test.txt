@@ -1,0 +1,7 @@
+# Verified on Windows with Python 3.12.2 (see docs/DEPLOYMENT.md).
+genlayer-test==0.29.2
+pytest==9.1.1
+
+# Lint and SDK validation. 0.11.0 cannot validate against the current runner
+# bundle format, so the working version is pinned.
+genvm-linter==0.11.1rc2

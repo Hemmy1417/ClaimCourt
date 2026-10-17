@@ -1,0 +1,50 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+This document is a synthetic wording written to exercise a review contract.
+It is not a real insurance policy, it is not offered to anyone, and no part
+of it has been reviewed by an insurer, a regulator or a lawyer.
+
+HOUSEHOLD CONTENTS WORDING
+Synthetic wording, edition 1
+
+Clause 2.1 What is covered
+Subject to the clauses below, the insurer covers loss of or damage to
+household contents at the insured address caused by fire, lightning,
+storm, theft following forcible entry, and escape of water from a fixed
+domestic water system.
+
+Clause 3.3 Notification of a claim
+The insured must notify the insurer of a claim within thirty days of
+becoming aware of the loss. A notification made after thirty days does not
+by itself end the cover; the insurer may reduce a payment to the extent the
+delay has prejudiced its position, and must say in what way it was
+prejudiced.
+
+Clause 4.2 Unoccupied premises
+The insurer does not cover loss or damage caused by escape of water where
+the insured address was left unoccupied for more than sixty consecutive
+days immediately before the loss. For this clause the premises are
+unoccupied on any day on which no person authorised by the insured slept
+at the address.
+
+Clause 5.4 Limit on jewellery
+Cover for jewellery is limited to two thousand units for any one item and
+six thousand units in total for any one claim. This limit applies to
+jewellery only. It does not reduce, exclude or otherwise affect cover for
+any other category of contents under the same claim.
+
+Clause 6.1 Reasonable care
+The insured must take reasonable care to keep the contents and the insured
+address in a sound condition. A failure to take reasonable care allows the
+insurer to refuse the part of a claim that the failure caused, and the
+insurer must identify which part.
+
+Clause 7.2 Fraudulent claims
+A claim that the insured knows to be false in a material respect is not
+covered, and the insurer may end the cover from the date of the claim. A
+suspicion that the insurer cannot evidence is not a known falsehood for
+this clause.
+
+Clause 8.5 Wear and tear
+The insurer does not cover damage that is the result of gradual
+deterioration, wear and tear, or lack of maintenance over time, as
+distinct from damage caused by a sudden event listed in clause 2.1.
