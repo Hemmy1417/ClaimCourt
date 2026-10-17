@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import pathlib
+import sys
 
 import pytest
 
@@ -20,6 +21,55 @@ from gltest.direct import VMContext, deploy_contract, create_test_addresses
 def hexaddr(account) -> str:
     """The checksummed spelling a contract stores for a test account."""
     return to_checksum_address(bytes(account))
+
+
+def _tolerate_windows_tempfile_unlink():
+    """Work around a Windows-only failure in the Direct Mode loader.
+
+    `gltest` 0.29.2 writes the transaction message to a temp file, binds that
+    file to fd 0 with `dup2`, closes its own descriptor and then unlinks the
+    path. POSIX allows unlinking a file another descriptor still references;
+    Windows does not, so contract loading dies with
+
+        PermissionError: [WinError 32] The process cannot access the file
+        because it is being used by another process
+
+    before any contract code runs. This wraps the loader's own helper so that
+    one failed cleanup is tolerated - the file is released when the process
+    exits - and restores `os.unlink` immediately afterwards.
+
+    It is a test-harness workaround for a host OS behaviour. The contract is
+    not involved and not modified, nothing outside the loader's own call is
+    affected, and on anything other than Windows this does nothing at all.
+    """
+    if sys.platform != "win32":
+        return
+    from gltest.direct import loader
+
+    original = getattr(loader, "_inject_message_to_fd0", None)
+    if original is None or getattr(original, "_unlink_tolerated", False):
+        return
+
+    def wrapped(vm):
+        real_unlink = os.unlink
+
+        def tolerant(path, *args, **kwargs):
+            try:
+                real_unlink(path, *args, **kwargs)
+            except OSError:
+                pass
+
+        os.unlink = tolerant
+        try:
+            return original(vm)
+        finally:
+            os.unlink = real_unlink
+
+    wrapped._unlink_tolerated = True
+    loader._inject_message_to_fd0 = wrapped
+
+
+_tolerate_windows_tempfile_unlink()
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]

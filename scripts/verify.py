@@ -35,10 +35,12 @@ BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 lines = []
 failures = []
+QUIET = []
 
 
 def say(text=""):
-    print(text, flush=True)
+    if not QUIET:
+        print(text, flush=True)
     lines.append(text)
 
 
@@ -87,6 +89,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
+    if args.quiet:
+        QUIET.append(True)
 
     ledger = json.loads(LEDGER.read_text(encoding="utf-8"))
     address = ledger["contract"]

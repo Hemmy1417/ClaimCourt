@@ -24,7 +24,7 @@ class IClaimCourt:
         pass
 
 
-COURT = Address("0x0000000000000000000000000000000000000000")  # see README
+COURT = Address("0x78188E7554564606401b7f3B368076D08e0ef63E")  # Studionet
 
 
 class DisputedAmountHold(gl.Contract):

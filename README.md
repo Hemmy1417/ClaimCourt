@@ -327,12 +327,14 @@ fixtures/                            synthetic wording and notices
 scripts/preflight.py                 source invariants, no dependencies
 scripts/mutate.py                    mutation sweep
 scripts/live.py                      live evidence driver
+scripts/verify.py                    read-only re-check of the live run
 docs/CONSENSUS.md                    the round, equivalence, forged leaders
 docs/SECURITY.md                     threat model and fail-closed policy
 docs/INTEGRATION.md                  how another contract consumes it
 docs/DEPLOYMENT.md                   canonical deployment evidence
 docs/TESTING.md                      every gate and the mutation sweep
 docs/proofs/live.md                  the live run, transaction by transaction
+docs/proofs/live.json                the ledger scripts/verify.py reads back
 DECISION.md                          why this primitive, and the collision audit
 SUBMISSION.md                        copy-ready submission notes
 ```
