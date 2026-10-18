@@ -53,6 +53,20 @@ def module(adjudicated):
     return sys.modules[type(adjudicated[0].contract).__module__]
 
 
+
+def _restate(module, context, payload):
+    """Keep a staged payload internally consistent.
+
+    The gate re-derives the verdict and the criteria from the findings, so a
+    payload whose findings were changed must restate its own outcome.
+    Without this, every staged payload below would be rejected for the wrong
+    reason and would prove nothing about the rule it is testing.
+    """
+    payload["criteria"] = module._criteria(context, payload)
+    payload["verdict"] = module._derive_verdict(context, payload)
+    return payload
+
+
 def test_the_honest_payload_passes_the_gate(module, adjudicated):
     """The control. Without it, every rejection below could be a staging
     error rather than a rule doing its job."""
@@ -79,14 +93,16 @@ def test_a_substantive_finding_without_its_words_is_refused(module,
         forged["findings"]["conditions"][0]["finding"] = finding
         forged["findings"]["conditions"][0]["quote"] = ""
         forged["findings"]["conditions"][0]["evidence_id"] = ""
-        assert module._parse_payload(forged, context, None, None) is None
+        assert module._parse_payload(_restate(module, context, forged),
+                                     context, None, None) is None
 
     # The uncertain form may carry no quote, which is the whole point of it.
     unclear = copy.deepcopy(payload)
     unclear["findings"]["conditions"][0]["finding"] = "UNCLEAR"
     unclear["findings"]["conditions"][0]["quote"] = ""
     unclear["findings"]["conditions"][0]["evidence_id"] = ""
-    parsed = module._parse_payload(unclear, context, None, None)
+    parsed = module._parse_payload(_restate(module, context, unclear),
+                                   context, None, None)
     assert parsed is not None
     assert module._derive_verdict(context, parsed) == "INCONCLUSIVE"
 
@@ -100,22 +116,92 @@ def test_an_evidenced_exclusion_without_its_words_is_refused(module,
     assert module._parse_payload(forged, context, None, None) is None
 
 
-def test_an_accusation_without_its_words_is_refused(module, adjudicated):
-    _harness, _policy, _submission, context, payload = adjudicated
+def test_an_accusation_without_its_words_is_refused(harness):
+    """Staged on a policy that does ask a fraud question: on one that does
+    not, the answer is refused for a different reason entirely."""
+    import sys
+
+    from conftest import (FRAUD_DEFINITION, POLICY_PROPERTY, STORM_INVOICE,
+                          STORM_REPORT)
+
+    policy_id = harness.register(FRAUD_DEFINITION)
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", STORM_EVENT, "E1"),
+         ("C2", "MET", STORM_NOTICE, "E1"),
+         ("C3", "MET", INVOICE_COST, "E2")],
+        [("X1", "NOT_EVIDENCED", "", ""), ("X2", "NOT_EVIDENCED", "", "")],
+        fraud={"finding": "NO_INDICATORS", "quote": "", "evidence_id": "",
+               "basis": "nothing in the papers suggests it"}))
+    assert harness.resolve(submission_id) == "COVERAGE_SUPPORTED"
+    module = sys.modules[type(harness.contract).__module__]
+    record = harness.contract.submissions.get(submission_id)
+    context = harness.contract._context(record)
+    context["round"] = int(record.rounds_used)
+    payload = json.loads(harness.contract.get_receipt(submission_id, 1))
+    assert module._parse_payload(payload, context, None, None) is not None
+
     forged = copy.deepcopy(payload)
     forged["findings"]["fraud"]["finding"] = "INDICATORS_FOUND"
     forged["findings"]["fraud"]["quote"] = ""
-    assert module._parse_payload(forged, context, None, None) is None
+    assert module._parse_payload(_restate(module, context, forged),
+                                 context, None, None) is None
+
+    # ... and only an accusation may carry a quote at all.
+    forged = copy.deepcopy(payload)
+    forged["findings"]["fraud"]["quote"] = INVOICE_COST
+    forged["findings"]["fraud"]["evidence_id"] = "E2"
+    assert module._parse_payload(_restate(module, context, forged),
+                                 context, None, None) is None
+
+
+def _unassessed(payload):
+    """The shape a round that did not assess is allowed to have."""
+    unread = copy.deepcopy(payload)
+    for row in unread["findings"]["conditions"]:
+        row.update({"finding": "NOT_ASSESSED", "quote": "", "evidence_id": ""})
+    for row in unread["findings"]["exclusions"]:
+        row.update({"finding": "NOT_ASSESSED", "quote": "", "evidence_id": ""})
+    unread["findings"]["evidence"].update(
+        {"sufficient": False, "contradiction": False, "quote": "",
+         "evidence_id": ""})
+    return unread
 
 
 def test_a_round_that_did_not_assess_cannot_carry_a_finding(module,
                                                             adjudicated):
-    """When the panel did not answer, every row has one permitted shape."""
+    """When the panel did not answer, every row has one permitted shape.
+
+    Each case leaves exactly one branch standing between the payload and
+    acceptance, so the rejection is attributable to that branch."""
     _harness, _policy, _submission, context, payload = adjudicated
     for state in ["INVALID", "SKIPPED"]:
-        forged = copy.deepcopy(payload)
+        # a condition carrying a finding, everything else in the unread shape
+        forged = _unassessed(payload)
         forged["panel_state"] = state
-        assert module._parse_payload(forged, context, None, None) is None
+        forged["findings"]["conditions"][0].update(
+            {"finding": "MET",
+             "quote": payload["findings"]["conditions"][0]["quote"],
+             "evidence_id": payload["findings"]["conditions"][0][
+                 "evidence_id"]})
+        assert module._parse_payload(_restate(module, context, forged),
+                                     context, None, None) is None
+
+        # an exclusion carrying a finding, everything else in the unread shape
+        forged = _unassessed(payload)
+        forged["panel_state"] = state
+        forged["findings"]["exclusions"][0]["finding"] = "NOT_EVIDENCED"
+        assert module._parse_payload(_restate(module, context, forged),
+                                     context, None, None) is None
+
+        # the evidence block claiming a judgement nobody made
+        forged = _unassessed(payload)
+        forged["panel_state"] = state
+        forged["findings"]["evidence"]["sufficient"] = True
+        assert module._parse_payload(_restate(module, context, forged),
+                                     context, None, None) is None
 
     unread = copy.deepcopy(payload)
     unread["panel_state"] = "INVALID"
@@ -126,7 +212,8 @@ def test_a_round_that_did_not_assess_cannot_carry_a_finding(module,
     unread["findings"]["evidence"].update(
         {"sufficient": False, "contradiction": False, "quote": "",
          "evidence_id": ""})
-    parsed = module._parse_payload(unread, context, None, None)
+    parsed = module._parse_payload(_restate(module, context, unread),
+                                   context, None, None)
     assert parsed is not None, "the permitted shape must still be accepted"
     assert module._derive_verdict(context, parsed) == "INCONCLUSIVE"
     assert module._evidence_status(parsed) == "EVIDENCE_INSUFFICIENT"
@@ -198,6 +285,37 @@ def test_an_unexamined_document_is_never_a_coverage_verdict(module,
     missing = copy.deepcopy(payload)
     missing["missing_required_kinds"] = ["invoice"]
     assert module._derive_verdict(context, missing) == "EVIDENCE_UNAVAILABLE"
+
+
+def test_a_trigger_state_that_does_not_follow_is_refused(module,
+                                                         adjudicated):
+    """This policy declares no trigger, so NOT_DECLARED is the only state
+    its payload may carry."""
+    _harness, _policy, _submission, context, payload = adjudicated
+    assert payload["trigger_state"] == "NOT_DECLARED"
+    for state in ["MET", "NOT_MET", "UNREADABLE"]:
+        forged = copy.deepcopy(payload)
+        forged["trigger_state"] = state
+        assert module._parse_payload(forged, context, None, None) is None
+
+
+def test_an_outcome_that_does_not_follow_from_the_findings_is_refused(
+        module, adjudicated):
+    """The gate re-derives the verdict and the criteria. A leader cannot
+    report an outcome its own findings do not produce - which is what makes
+    it safe for validators to compare the outcome rather than every label
+    behind it."""
+    _harness, _policy, _submission, context, payload = adjudicated
+    for verdict in ["COVERAGE_NOT_ESTABLISHED", "EXCLUSION_APPLIES",
+                    "INCONCLUSIVE", "FRAUD_INDICATORS_FOUND"]:
+        forged = copy.deepcopy(payload)
+        forged["verdict"] = verdict
+        assert module._parse_payload(forged, context, None, None) is None
+    for field in ["policy_version_verified", "covered_event_supported",
+                  "required_conditions_met", "exclusion_evidence_found"]:
+        forged = copy.deepcopy(payload)
+        forged["criteria"][field] = not forged["criteria"][field]
+        assert module._parse_payload(forged, context, None, None) is None
 
 
 def test_the_criteria_follow_the_findings(module, adjudicated):

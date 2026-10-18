@@ -1,7 +1,7 @@
 """Hosted Studionet integration: real deployment, real validators, real
 documents, real consensus.
 
-    gltest tests/integration -v -s --network studionet
+    CLAIMCOURT_FIXTURE_REF=<sha> gltest tests/integration -v -s --network studionet
 
 Each behavioural test deploys its own contract, so the tests do not depend
 on each other or on an order. These deployments are disposable; the
@@ -28,6 +28,7 @@ from gltest.assertions import tx_execution_succeeded
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "fixtures"
+
 # Relative to the contracts directory in gltest.config.yaml.
 CONTRACT = "claimcourt.py"
 
@@ -37,26 +38,82 @@ RPC = "https://studio.genlayer.com/api"
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
 
-POLICY = "policy-household-v1.txt"
-NOTICE_UNOCCUPIED = "notice-unoccupied.txt"
-NOTICE_LATE = "notice-late-notification.txt"
-NOTICE_DIRECTED = "notice-unoccupied-directed.txt"
-MISSING = "notice-that-does-not-exist.txt"
+POLICY_PROPERTY = "policy-property-v1.txt"
+STORM_REPORT = "incident-report-storm.txt"
+STORM_INVOICE = "repair-invoice-storm.txt"
+NO_ENTRY_REPORT = "incident-report-no-forced-entry.txt"
+DIRECTED_REPORT = "incident-report-directed.txt"
+MISSING = "document-that-does-not-exist.txt"
 
-GROUND_UNOCCUPIED = ("the insured address was left unoccupied for more than "
-                     "sixty consecutive days immediately before the loss")
-GROUND_LATE = ("because the notification was late the cover for this claim "
-               "ended and no payment is due")
-TODAY = "2026-10-17"
+DEADLINE = "2027-06-30"
+AS_OF = "2026-10-18"
 
-# The deployed contract carries the account it was deployed with, so a
-# write needs only patience: a hosted round is slower than a local one.
+# The deployed contract carries the account it was deployed with, so a write
+# needs only patience: a hosted round is slower than a local one.
 WAIT = {"consensus_max_rotations": 3, "wait_interval": 5000,
         "wait_retries": 100}
 
+PROPERTY_DEFINITION = {
+    "coverage_conditions": [
+        {"ref": "C1", "covered_event": True,
+         "text": "A covered event under clause 1 occurred at the insured "
+                 "premises during the period of insurance and caused the "
+                 "damage claimed."},
+        {"ref": "C2",
+         "text": "The loss was reported to the insurer within thirty days "
+                 "of the insured becoming aware of it, and the record shows "
+                 "when they became aware."},
+        {"ref": "C3",
+         "text": "The cost of reinstatement for the items claimed is "
+                 "evidenced by an invoice, an estimate or an assessor's "
+                 "figure."},
+    ],
+    "exclusions": [
+        {"ref": "X1",
+         "text": "The damage is the result of gradual deterioration, wear "
+                 "and tear, rot, corrosion or lack of maintenance over "
+                 "time, rather than a sudden event."},
+    ],
+    "review_window_days": 365,
+}
+
+THEFT_DEFINITION = {
+    "coverage_conditions": [
+        {"ref": "C1", "covered_event": True,
+         "text": "A covered event under clause 1 occurred at the insured "
+                 "premises during the period of insurance and caused the "
+                 "loss claimed."},
+        {"ref": "C4",
+         "text": "For a theft claim there is evidence of forcible and "
+                 "violent entry to the premises. Entry by a door or window "
+                 "left open or unlocked is not forcible and violent entry."},
+    ],
+    "exclusions": [],
+    "review_window_days": 365,
+}
+
+STORM_INCIDENT = {
+    "incident_summary": "A storm on the night of 2 to 3 March 2026 lifted "
+                        "the roof covering and water entered the stockroom, "
+                        "damaging racking, stock and ceiling panels.",
+    "incident_date": "2026-03-03",
+    "incident_location_reference": "SYN-UNIT-4",
+    "claimed_loss_category": "contents",
+    "claimed_amount_band": "1000-5000",
+}
+
+THEFT_INCIDENT = {
+    "incident_summary": "Stock and a laptop were found missing from the "
+                        "unit on the morning of 29 July 2026.",
+    "incident_date": "2026-07-29",
+    "incident_location_reference": "SYN-UNIT-12",
+    "claimed_loss_category": "contents",
+    "claimed_amount_band": "1000-5000",
+}
+
 
 def _published(name):
-    """(url, sha256) for a document, proven to be fetchable and to match the
+    """(url, sha256) for a document, proven fetchable and identical to the
     committed fixture."""
     url = RAW % (REF, name)
     request = urllib.request.Request(url, headers={"User-Agent": BROWSER_UA})
@@ -91,126 +148,210 @@ def account():
 @pytest.fixture
 def contract(account):
     factory = get_contract_factory(contract_file_path=CONTRACT)
-    return factory.deploy(args=[], account=account,
-                          consensus_max_rotations=3,
-                          wait_interval=5000, wait_retries=100)
+    return factory.deploy(args=[], account=account, **WAIT)
 
 
-@pytest.fixture
-def clause_set(contract, account):
-    url, digest = _published(POLICY)
-    receipt = contract.register_clause_set(
-        args=["Household contents wording, synthetic edition 1", url, digest,
-              365]).transact(**WAIT)
+def _register(contract, definition=PROPERTY_DEFINITION,
+              coverage_type="small commercial property"):
+    url, digest = _published(POLICY_PROPERTY)
+    receipt = contract.register_policy(
+        args=[url, digest, coverage_type, json.dumps(definition)]
+    ).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
-    record = contract.get_clause_set(args=["cs-1", 1]).call()
-    assert record["policy_sha256"] == digest
-    return "cs-1"
+    return "pol-1", digest
 
 
-def _open(contract, account, clause_set_id, notice, refs, grounds,
-          reference="SYN-LIVE"):
-    url, digest = _published(notice)
-    receipt = contract.open_review(
-        args=[clause_set_id, url, digest, reference, refs,
-              grounds]).transact(**WAIT)
+def _challenge(contract, policy_id, question, required):
+    receipt = contract.open_claim_challenge(
+        args=[policy_id, question, json.dumps(required), DEADLINE]
+    ).transact(**WAIT)
     assert tx_execution_succeeded(receipt)
-    review_id = contract.notice_under_review(args=[digest]).call()
-    assert review_id != ""
-    return review_id
+    return "clm-1"
 
 
-def test_deploy_and_public_surface(contract, clause_set):
+def _submit(contract, claim_id, documents, incident, reference):
+    evidence = []
+    for evidence_id, kind, name in documents:
+        if name == MISSING:
+            evidence.append({"evidence_id": evidence_id, "kind": kind,
+                             "url": RAW % (REF, MISSING),
+                             "sha256": "d" * 64})
+            continue
+        url, digest = _published(name)
+        evidence.append({"evidence_id": evidence_id, "kind": kind,
+                         "url": url, "sha256": digest})
+    receipt = contract.submit_claim(
+        args=[claim_id, reference, json.dumps(incident),
+              json.dumps(evidence)]).transact(**WAIT)
+    assert tx_execution_succeeded(receipt)
+    return "sub-1"
+
+
+def test_deploy_and_public_surface(contract):
     config = contract.get_config().call()
     assert config["schema"] == "claimcourt/1"
-    assert "DENIAL_SUPPORTED" in config["verdicts"]
-    assert config["max_grounds"] == 6
-    record = contract.get_clause_set(args=[clause_set, 1]).call()
-    assert record["version"] == 1
-    assert record["revoked"] is False
-    assert len(record["definition_hash"]) == 64
-    assert contract.clause_set_head(args=[clause_set]).call() == 1
-    assert contract.get_stats().call()["clause_sets"] == 1
+    assert "COVERAGE_SUPPORTED" in config["verdicts"]
+    assert config["max_evidence"] == 6
+
+    policy_id, digest = _register(contract)
+    policy = contract.get_policy(args=[policy_id, 1]).call()
+    assert policy["policy_sha256"] == digest
+    assert len(policy["policy_hash"]) == 64
+    assert [c["ref"] for c in policy["coverage_conditions"]] == ["C1", "C2",
+                                                                "C3"]
+
+    claim_id = _challenge(
+        contract, policy_id,
+        "Does this claim satisfy the conditions of cover for the damage "
+        "claimed, and does any exclusion apply?",
+        ["incident_report", "invoice"])
+    claim = contract.get_claim(args=[claim_id]).call()
+    assert claim["policy_version"] == 1
+    assert claim["required_evidence"] == ["incident_report", "invoice"]
+    assert claim["status"] == "OPEN"
+    assert contract.get_policy_hash(args=[claim_id]).call() \
+        == policy["policy_hash"]
+    assert contract.get_stats().call()["challenges"] == 1
 
 
-def test_a_denial_that_stands(contract, account, clause_set):
-    review_id = _open(contract, account, clause_set, NOTICE_UNOCCUPIED,
-                      ["Clause 4.2"], [GROUND_UNOCCUPIED], "SYN-0041")
-    receipt = contract.resolve_review(args=[review_id]).transact(**WAIT)
+def test_a_claim_that_satisfies_its_policy(contract):
+    policy_id, _digest = _register(contract)
+    claim_id = _challenge(
+        contract, policy_id,
+        "Does this claim satisfy the conditions of cover for the damage "
+        "claimed, and does any exclusion apply?",
+        ["incident_report", "invoice"])
+    submission_id = _submit(
+        contract, claim_id,
+        [("E1", "incident_report", STORM_REPORT),
+         ("E2", "invoice", STORM_INVOICE)], STORM_INCIDENT, "SYN-2041")
+
+    receipt = contract.resolve_submission(args=[submission_id]).transact(
+        **WAIT)
     assert tx_execution_succeeded(receipt)
     # The receipt is not the proof: a round whose validators disagreed can
     # report success and store nothing. The stored state is the proof.
-    review = contract.get_review(args=[review_id]).call()
-    assert review["status"] == "RESOLVED"
-    assert review["verdict"] == "DENIAL_SUPPORTED"
-    assert review["policy_status"] == "EXAMINED"
-    assert review["notice_status"] == "EXAMINED"
-    assert review["panel_state"] == "READ"
-    ground = contract.get_grounds(args=[review_id]).call()[0]
-    assert ground["outcome"] == "SUPPORTED"
-    # Every quote the panel returned was re-checked against the bytes each
-    # node verified, so a stored quote really is in the document.
-    assert len(ground["clause_quote"]) >= 12
-    assert len(ground["notice_quote"]) >= 12
-    assert contract.is_denial_supported(args=[review_id, TODAY]).call() is True
-    assert contract.is_consumable(args=[review_id, TODAY]).call() is True
-    assert contract.clause_record(
-        args=[clause_set, 1, "Clause 4.2"]).call()["SUPPORTED"] == 1
+    record = contract.get_submission(args=[submission_id]).call()
+    assert record["status"] == "RESOLVED"
+    assert record["verdict"] == "COVERAGE_SUPPORTED"
+    assert record["evidence_status"] == "EVIDENCE_SUFFICIENT"
+    assert record["panel_state"] == "ASSESSED"
+    assert record["policy_status"] == "EVIDENCE_REACHABLE"
+    for item in record["evidence_refs"]:
+        assert item["status"] == "EVIDENCE_REACHABLE"
+        assert item["byte_count"] > 0
+
+    verdict = contract.get_verdict(args=[submission_id]).call()
+    assert verdict["criteria"] == {
+        "policy_version_verified": True,
+        "covered_event_supported": True,
+        "required_conditions_met": True,
+        "exclusion_evidence_found": False,
+    }
+    # Every finding that counts carries words from the documents, re-checked
+    # by each validator against the bytes it verified itself.
+    findings = contract.get_findings(args=[submission_id]).call()
+    for row in findings["conditions"]:
+        assert row["finding"] == "MET"
+        assert len(row["quote"]) >= 12
+        assert row["evidence_id"] in ("E1", "E2")
+    assert contract.is_coverage_supported(
+        args=[submission_id, AS_OF]).call() is True
+    assert contract.policy_record(
+        args=[policy_id, 1]).call()["COVERAGE_SUPPORTED"] == 1
 
 
-def test_a_denial_the_clause_does_not_support(contract, account, clause_set):
-    review_id = _open(contract, account, clause_set, NOTICE_LATE,
-                      ["Clause 3.3"], [GROUND_LATE], "SYN-0052")
-    receipt = contract.resolve_review(args=[review_id]).transact(**WAIT)
+def test_a_condition_the_evidence_does_not_meet(contract):
+    policy_id, _digest = _register(contract, THEFT_DEFINITION,
+                                   "commercial theft")
+    claim_id = _challenge(
+        contract, policy_id,
+        "Was there forcible and violent entry, as the theft cover requires?",
+        ["incident_report"])
+    submission_id = _submit(
+        contract, claim_id, [("E1", "incident_report", NO_ENTRY_REPORT)],
+        THEFT_INCIDENT, "SYN-2063")
+
+    receipt = contract.resolve_submission(args=[submission_id]).transact(
+        **WAIT)
     assert tx_execution_succeeded(receipt)
-    review = contract.get_review(args=[review_id]).call()
-    assert review["status"] == "RESOLVED"
-    assert review["verdict"] == "DENIAL_UNSUPPORTED"
-    assert contract.get_grounds(
-        args=[review_id]).call()[0]["outcome"] == "UNSUPPORTED"
-    assert contract.is_denial_supported(
-        args=[review_id, TODAY]).call() is False
-    assert contract.is_denial_unsupported(
-        args=[review_id, TODAY]).call() is True
+    record = contract.get_submission(args=[submission_id]).call()
+    # Either the panel settles it against the claim or it cannot settle it.
+    # What must hold is that the claim does not become covered, and that a
+    # claim not established is never called fraud.
+    assert record["verdict"] in ("COVERAGE_NOT_ESTABLISHED", "INCONCLUSIVE")
+    assert record["fraud_finding"] == "NOT_ASKED"
+    assert contract.is_coverage_supported(
+        args=[submission_id, AS_OF]).call() is False
+    if record["verdict"] == "COVERAGE_NOT_ESTABLISHED":
+        verdict = contract.get_verdict(args=[submission_id]).call()
+        assert verdict["criteria"]["required_conditions_met"] is False
+        assert contract.is_consumable(args=[submission_id, AS_OF]).call() \
+            is True
 
 
-def test_a_notice_that_addresses_its_reader_is_not_upheld(contract, account,
-                                                          clause_set):
-    review_id = _open(contract, account, clause_set, NOTICE_DIRECTED,
-                      ["Clause 4.2"], [GROUND_UNOCCUPIED], "SYN-0085")
-    receipt = contract.resolve_review(args=[review_id]).transact(**WAIT)
+def test_evidence_that_addresses_its_reader_cannot_win_coverage(contract):
+    policy_id, _digest = _register(contract)
+    claim_id = _challenge(
+        contract, policy_id,
+        "Does this claim satisfy the conditions of cover for the damage "
+        "claimed, and does any exclusion apply?",
+        ["incident_report", "invoice"])
+    submission_id = _submit(
+        contract, claim_id,
+        [("E1", "incident_report", DIRECTED_REPORT),
+         ("E2", "invoice", STORM_INVOICE)], STORM_INCIDENT, "SYN-2074")
+
+    receipt = contract.resolve_submission(args=[submission_id]).transact(
+        **WAIT)
     assert tx_execution_succeeded(receipt)
-    review = contract.get_review(args=[review_id]).call()
-    # The notice tells its reader to uphold every ground. Code counted the
-    # instruction, and the verdict cannot be an upholding.
-    assert review["directed_text_hits"] >= 3
-    assert review["verdict"] == "INCONCLUSIVE"
-    assert review["status"] == "RETRYABLE"
-    assert contract.is_denial_supported(
-        args=[review_id, TODAY]).call() is False
-    assert contract.is_consumable(args=[review_id, TODAY]).call() is False
+    record = contract.get_submission(args=[submission_id]).call()
+    # The report tells its reader to approve the claim. Code counted the
+    # instruction, and the claim cannot become covered on that reading.
+    assert record["directed_text_hits"] >= 3
+    assert record["verdict"] == "INCONCLUSIVE"
+    assert record["status"] == "RETRYABLE"
+    assert contract.is_coverage_supported(
+        args=[submission_id, AS_OF]).call() is False
+    assert contract.is_consumable(args=[submission_id, AS_OF]).call() is False
+    assert policy_id == "pol-1"
 
 
-def test_an_unfetchable_document_is_not_a_finding(contract, account,
-                                                  clause_set):
-    url = RAW % (REF, MISSING)
-    receipt = contract.open_review(
-        args=[clause_set, url, "d" * 64, "SYN-0099", ["Clause 4.2"],
-              [GROUND_UNOCCUPIED]]).transact(**WAIT)
+def test_an_unfetchable_required_document_is_not_a_finding(contract):
+    policy_id, _digest = _register(contract)
+    claim_id = _challenge(
+        contract, policy_id,
+        "Does this claim satisfy the conditions of cover for the damage "
+        "claimed, and does any exclusion apply?",
+        ["incident_report", "invoice"])
+    submission_id = _submit(
+        contract, claim_id,
+        [("E1", "incident_report", STORM_REPORT),
+         ("E2", "invoice", MISSING)], STORM_INCIDENT, "SYN-2099")
+
+    receipt = contract.resolve_submission(args=[submission_id]).transact(
+        **WAIT)
     assert tx_execution_succeeded(receipt)
-    review_id = contract.notice_under_review(args=["d" * 64]).call()
-    receipt = contract.resolve_review(args=[review_id]).transact(**WAIT)
+    record = contract.get_submission(args=[submission_id]).call()
+    assert record["verdict"] == "EVIDENCE_UNAVAILABLE"
+    assert record["evidence_status"] == "EVIDENCE_UNAVAILABLE"
+    assert record["panel_state"] == "SKIPPED"
+    assert record["status"] == "RETRYABLE"
+    assert record["evidence_refs"][1]["status"] == "EVIDENCE_UNAVAILABLE"
+    assert record["evidence_refs"][1]["reason"] == "FETCH_FAILED"
+    # Nothing was assessed, so nothing was found against anyone.
+    findings = contract.get_findings(args=[submission_id]).call()
+    for row in findings["conditions"]:
+        assert row["finding"] == "NOT_ASSESSED"
+    assert contract.is_consumable(args=[submission_id, AS_OF]).call() is False
+
+    # The recovery path: the claimant withdraws the claim rather than
+    # leaving it unsettled.
+    receipt = contract.cancel_submission(args=[submission_id]).transact(
+        **WAIT)
     assert tx_execution_succeeded(receipt)
-    review = contract.get_review(args=[review_id]).call()
-    assert review["verdict"] == "RECORD_UNAVAILABLE"
-    assert review["notice_status"] == "UNAVAILABLE"
-    assert review["panel_state"] == "SKIPPED"
-    assert review["status"] == "RETRYABLE"
-    assert contract.is_consumable(args=[review_id, TODAY]).call() is False
-    # The recovery path: the opener takes the review back, and the notice is
-    # free to be reviewed again at a location that can be fetched.
-    receipt = contract.withdraw_review(args=[review_id]).transact(**WAIT)
-    assert tx_execution_succeeded(receipt)
-    assert contract.get_review(args=[review_id]).call()["status"] \
-        == "WITHDRAWN"
-    assert contract.notice_under_review(args=["d" * 64]).call() == ""
+    record = contract.get_submission(args=[submission_id]).call()
+    assert record["status"] == "CANCELLED"
+    assert record["verdict"] == "CANCELLED"
+    assert contract.is_consumable(args=[submission_id, AS_OF]).call() is False
+    assert policy_id == "pol-1"

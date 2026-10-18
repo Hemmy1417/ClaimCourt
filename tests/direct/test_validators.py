@@ -81,10 +81,50 @@ def test_a_different_but_grounded_quote_is_not_disagreement(adjudicated):
     (0, "NOT_MET"), (1, "NOT_MET"), (2, "UNCLEAR"), (0, "NOT_ASSESSED"),
 ])
 def test_a_forged_condition_finding_is_rejected(adjudicated, index, finding):
+    """Each of these changes the outcome the payload carries, and the
+    outcome is what the round agrees on."""
     harness, _submission_id, payload = adjudicated
     forged = copy.deepcopy(payload)
     forged["findings"]["conditions"][index]["finding"] = finding
     assert _vote(harness, forged) is False
+
+
+def test_the_outcome_is_what_must_agree_not_the_label_behind_it(adjudicated):
+    """Two honest nodes reading the same documents can label a condition
+    differently and still reach the same verdict. Requiring every label to
+    match would split the round over nothing - and did, on the live network,
+    before this was the rule.
+
+    What must still match is the verdict and the four criteria, and a
+    payload whose outcome does not follow from its own findings is refused
+    by the gate before any of this (see test_gate_units.py).
+    """
+    harness, _submission_id, payload = adjudicated
+    import sys
+    module = sys.modules[type(harness.contract).__module__]
+
+    # This node read every condition as met and the claim as covered. A
+    # leader that reached the same verdict by a different route agrees.
+    assert payload["verdict"] == "COVERAGE_SUPPORTED"
+    reworded = copy.deepcopy(payload)
+    reworded["findings"]["conditions"][1]["basis"] = "the dates are stated"
+    reworded["findings"]["conditions"][1]["quote"] = STORM_EVENT_ALT
+    assert _vote(harness, reworded) is True
+
+    # A verdict this node did not reach is refused, however well-formed.
+    for verdict in ["COVERAGE_NOT_ESTABLISHED", "INCONCLUSIVE",
+                    "EXCLUSION_APPLIES"]:
+        forged = copy.deepcopy(payload)
+        forged["verdict"] = verdict
+        assert _vote(harness, forged) is False
+
+    # So is a criterion this node did not find.
+    for field in ["policy_version_verified", "covered_event_supported",
+                  "required_conditions_met", "exclusion_evidence_found"]:
+        forged = copy.deepcopy(payload)
+        forged["criteria"][field] = not forged["criteria"][field]
+        assert _vote(harness, forged) is False
+    assert module is not None
 
 
 def test_a_forged_exclusion_is_rejected(adjudicated):

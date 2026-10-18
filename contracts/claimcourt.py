@@ -912,6 +912,11 @@ def _node_round(ctx: dict) -> tuple:
         "findings": findings,
     }
     payload["trigger_state"] = _trigger_state(ctx, findings)
+    # Each node derives the outcome from its own reading. The verdict and
+    # the four criteria are what validators must agree on; the individual
+    # condition labels behind them are diagnostic.
+    payload["criteria"] = _criteria(ctx, payload)
+    payload["verdict"] = _derive_verdict(ctx, payload)
     return (payload, policy_text, texts)
 
 
@@ -920,7 +925,13 @@ def _node_round(ctx: dict) -> tuple:
 DECISION_FIELDS = ["schema", "submission_id", "claim_id", "round",
                    "policy_hash", "policy_version", "policy_sha256",
                    "evidence_digest", "policy_status", "policy_reason",
-                   "directed_text_hits", "panel_state", "trigger_state"]
+                   "directed_text_hits", "panel_state", "trigger_state",
+                   "verdict"]
+
+# The four criteria a downstream system reads. They are derived in code from
+# the findings, and validators must agree on all four.
+CRITERIA_FIELDS = ["policy_version_verified", "covered_event_supported",
+                   "required_conditions_met", "exclusion_evidence_found"]
 
 
 def _parse_payload(raw, ctx: dict, policy_text, texts):
@@ -1031,7 +1042,7 @@ def _parse_payload(raw, ctx: dict, policy_text, texts):
     if _trigger_state(ctx, clean) != trigger_state:
         return None
 
-    return {
+    outcome = {
         "schema": SCHEMA_VERSION, "submission_id": ctx["submission_id"],
         "claim_id": ctx["claim_id"], "round": round_value,
         "policy_hash": ctx["policy_hash"],
@@ -1044,6 +1055,15 @@ def _parse_payload(raw, ctx: dict, policy_text, texts):
         "trigger_state": trigger_state, "rows": clean_rows,
         "findings": clean,
     }
+    criteria = _criteria(ctx, outcome)
+    verdict = _derive_verdict(ctx, outcome)
+    if payload.get("criteria") != criteria:
+        return None
+    if payload.get("verdict") != verdict:
+        return None
+    outcome["criteria"] = criteria
+    outcome["verdict"] = verdict
+    return outcome
 
 
 def _parse_findings(findings: dict, ctx: dict, panel_state: str, texts):
@@ -1199,24 +1219,27 @@ def _first_difference(own: dict, theirs: dict) -> str:
                 return "rows[" + str(index) + "]." + field
     mine = own["findings"]
     yours = theirs["findings"]
-    for index in range(len(mine["conditions"])):
-        for field in ["ref", "finding"]:
-            if mine["conditions"][index][field] \
-                    != yours["conditions"][index][field]:
-                return "conditions[" + str(index) + "]." + field + ": " \
-                    + str(mine["conditions"][index][field]) + " != " \
-                    + str(yours["conditions"][index][field])
+    for field in CRITERIA_FIELDS:
+        if own["criteria"][field] != theirs["criteria"][field]:
+            return "criteria." + field + ": " \
+                + str(own["criteria"][field]) + " != " \
+                + str(theirs["criteria"][field])
+    # The rows must describe the same documents in the same order; which of
+    # them a node quoted for a given condition may differ.
+    for index in range(len(own["findings"]["conditions"])):
+        if mine["conditions"][index]["ref"] \
+                != yours["conditions"][index]["ref"]:
+            return "conditions[" + str(index) + "].ref"
     for index in range(len(mine["exclusions"])):
-        for field in ["ref", "finding"]:
-            if mine["exclusions"][index][field] \
-                    != yours["exclusions"][index][field]:
-                return "exclusions[" + str(index) + "]." + field
-    for field in ["sufficient", "contradiction"]:
-        if mine["evidence"][field] != yours["evidence"][field]:
-            return "evidence." + field
+        if mine["exclusions"][index]["ref"] \
+                != yours["exclusions"][index]["ref"]:
+            return "exclusions[" + str(index) + "].ref"
+    # A measurement is a fact, not a judgement: nodes must read the same
+    # number out of the same record.
     for field in ["value_found", "value"]:
         if mine["trigger"][field] != yours["trigger"][field]:
             return "trigger." + field
+    # An accusation is decision-critical in both directions.
     if mine["fraud"]["finding"] != yours["fraud"]["finding"]:
         return "fraud.finding"
     return ""
