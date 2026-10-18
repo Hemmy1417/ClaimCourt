@@ -1,8 +1,9 @@
 """Shared harness for the Direct Mode suite.
 
-Only the nondeterministic edges are mocked: the two document fetches and the
-panel call. Every test exercises the contract's own admission, grounding,
-derivation and storage code - nothing stubs out `resolve_review` itself.
+Only the nondeterministic edges are mocked: the policy fetch, each evidence
+fetch, and the panel call. Everything between them - admission, deadlines,
+required kinds, hashing, grounding, the trigger comparison, precedence,
+storage and the counters - is the contract's own code.
 """
 
 import hashlib
@@ -82,18 +83,22 @@ CONTRACT = pathlib.Path(
 FIXTURES = ROOT / "fixtures"
 
 # Any https host works against a mocked fetch; these are the locations the
-# live suite uses, so the two suites exercise the same admission rules.
+# live suite uses, so both suites meet the same admission rules.
 BASE = "https://raw.githubusercontent.com/Hemmy1417/ClaimCourt/main/fixtures/"
 
-POLICY = "policy-household-v1.txt"
-NOTICE_UNOCCUPIED = "notice-unoccupied.txt"
-NOTICE_LATE = "notice-late-notification.txt"
-NOTICE_JEWELLERY = "notice-jewellery-limit.txt"
-NOTICE_FLOOD = "notice-flood-clause.txt"
-NOTICE_DIRECTED = "notice-unoccupied-directed.txt"
+POLICY_PROPERTY = "policy-property-v1.txt"
+POLICY_CROP = "policy-crop-parametric-v1.txt"
+STORM_REPORT = "incident-report-storm.txt"
+STORM_INVOICE = "repair-invoice-storm.txt"
+GRADUAL_REPORT = "assessor-report-gradual.txt"
+NO_ENTRY_REPORT = "incident-report-no-forced-entry.txt"
+DIRECTED_REPORT = "incident-report-directed.txt"
+RAINFALL_RECORD = "rainfall-record-season.txt"
+HOLDING_STATEMENT = "holding-statement-groundnut.txt"
 
 TODAY = "2026-10-17T09:30:00.000+00:00"
 TODAY_DATE = "2026-10-17"
+DEADLINE = "2026-12-31"
 
 
 def doc_bytes(name: str) -> bytes:
@@ -117,16 +122,150 @@ def sha_of(text: str) -> str:
 
 
 def quote_from(name: str, needle: str, length: int = 90) -> str:
-    """A verbatim span of a fixture, so a test quotes what the document
-    really says instead of inventing language the contract would reject."""
+    """A verbatim span of a fixture, flattened the way the contract
+    flattens, so a test quotes what the document really says."""
     text = " ".join(doc_text(name).split())
     position = text.find(needle)
     assert position >= 0, "fixture does not contain " + needle
     return text[position:position + length]
 
 
+# -- the policies the suite uses -------------------------------------------
+
+PROPERTY_DEFINITION = {
+    "coverage_conditions": [
+        {"ref": "C1", "covered_event": True,
+         "text": "A covered event under clause 1 occurred at the insured "
+                 "premises during the period of insurance and caused the "
+                 "damage claimed."},
+        {"ref": "C2",
+         "text": "The loss was reported to the insurer within thirty days "
+                 "of the insured becoming aware of it, and the record shows "
+                 "when they became aware."},
+        {"ref": "C3",
+         "text": "The cost of reinstatement for the items claimed is "
+                 "evidenced by an invoice, an estimate or an assessor's "
+                 "figure."},
+    ],
+    "exclusions": [
+        {"ref": "X1",
+         "text": "The damage is the result of gradual deterioration, wear "
+                 "and tear, rot, corrosion or lack of maintenance over "
+                 "time, rather than a sudden event."},
+        {"ref": "X2",
+         "text": "The premises were left unoccupied for more than sixty "
+                 "consecutive days immediately before the loss."},
+    ],
+    "review_window_days": 365,
+}
+
+THEFT_DEFINITION = {
+    "coverage_conditions": [
+        {"ref": "C1", "covered_event": True,
+         "text": "A covered event under clause 1 occurred at the insured "
+                 "premises during the period of insurance and caused the "
+                 "loss claimed."},
+        {"ref": "C4",
+         "text": "For a theft claim there is evidence of forcible and "
+                 "violent entry to the premises. Entry by a door or window "
+                 "left open or unlocked is not forcible and violent entry."},
+    ],
+    "exclusions": [
+        {"ref": "X1",
+         "text": "The loss is the result of gradual deterioration, wear and "
+                 "tear or lack of maintenance over time."},
+    ],
+    "review_window_days": 365,
+}
+
+CROP_DEFINITION = {
+    "coverage_conditions": [
+        {"ref": "C1", "covered_event": True,
+         "text": "The claim is made for the holding named in the schedule "
+                 "and identifies the station and window the schedule "
+                 "names."},
+        {"ref": "C2",
+         "text": "The claim is supported by the published rainfall record "
+                 "for that station and window, as issued by the publishing "
+                 "body."},
+    ],
+    "exclusions": [
+        {"ref": "X1",
+         "text": "The loss was caused by pests, disease, fire, theft or "
+                 "civil disturbance rather than by the measured rainfall "
+                 "shortfall."},
+    ],
+    "trigger": {
+        "measure": "cumulative rainfall at the synthetic reference station",
+        "unit": "millimetres",
+        "rule": "AT_MOST",
+        "threshold": 220,
+        "window_start": "2026-06-01",
+        "window_end": "2026-09-30",
+    },
+    "review_window_days": 365,
+}
+
+FRAUD_DEFINITION = json.loads(json.dumps(PROPERTY_DEFINITION))
+FRAUD_DEFINITION["fraud_question"] = (
+    "Do the documents show that the same damage was claimed twice, or that "
+    "an invoice was altered after it was issued?")
+
+
+STORM_EVIDENCE = [
+    {"evidence_id": "E1", "kind": "incident_report", "name": STORM_REPORT},
+    {"evidence_id": "E2", "kind": "invoice", "name": STORM_INVOICE},
+]
+GRADUAL_EVIDENCE = [
+    {"evidence_id": "E1", "kind": "incident_report", "name": STORM_REPORT},
+    {"evidence_id": "E2", "kind": "invoice", "name": STORM_INVOICE},
+    {"evidence_id": "E3", "kind": "assessor_report", "name": GRADUAL_REPORT},
+]
+THEFT_EVIDENCE = [
+    {"evidence_id": "E1", "kind": "incident_report", "name": NO_ENTRY_REPORT},
+]
+CROP_EVIDENCE = [
+    {"evidence_id": "E1", "kind": "holding_statement",
+     "name": HOLDING_STATEMENT},
+    {"evidence_id": "E2", "kind": "weather_record", "name": RAINFALL_RECORD},
+]
+DIRECTED_EVIDENCE = [
+    {"evidence_id": "E1", "kind": "incident_report", "name": DIRECTED_REPORT},
+    {"evidence_id": "E2", "kind": "invoice", "name": STORM_INVOICE},
+]
+
+STORM_INCIDENT = {
+    "incident_summary": "A storm on the night of 2 to 3 March 2026 lifted "
+                        "the roof covering and water entered the stockroom, "
+                        "damaging racking, stock and ceiling panels.",
+    "incident_date": "2026-03-03",
+    "incident_location_reference": "SYN-UNIT-4",
+    "claimed_loss_category": "contents",
+    "claimed_amount_band": "1000-5000",
+}
+
+THEFT_INCIDENT = {
+    "incident_summary": "Stock and a laptop were found missing from the "
+                        "unit on the morning of 29 July 2026.",
+    "incident_date": "2026-07-29",
+    "incident_location_reference": "SYN-UNIT-12",
+    "claimed_loss_category": "contents",
+    "claimed_amount_band": "1000-5000",
+}
+
+CROP_INCIDENT = {
+    "incident_summary": "The 2026 growing window closed with recorded "
+                        "rainfall below the level the schedule insures "
+                        "against at the named station.",
+    "incident_date": "2026-09-30",
+    "incident_location_reference": "SYN-PLOT-7",
+    "claimed_loss_category": "parametric drought",
+    "claimed_amount_band": "fixed payout",
+}
+
+
 class Harness:
-    """One deployed contract plus the mocking the round needs."""
+    """One deployed contract plus the mocking a round needs."""
 
     def __init__(self, vm, contract, accounts):
         self.vm = vm
@@ -145,21 +284,39 @@ class Harness:
                       "body": doc_text(name) if body is None else body},
         )
 
+    def mock_docs(self, *names):
+        for name in names:
+            self.mock_doc(name)
+
     def mock_panel(self, raw):
-        self.vm.mock_llm(prompt_pattern="review whether a refusal notice",
+        self.vm.mock_llm(prompt_pattern="assess one insurance claim",
                          response=raw)
 
-    def panel_json(self, rows):
-        return json.dumps({"grounds": rows})
-
-    def row(self, index=0, located=True, clause_quote="", stated=True,
-            notice_quote="", supported="YES", exceeded=False,
-            basis="synthetic test row"):
-        return {"index": index, "clause_located": located,
-                "clause_quote": clause_quote,
-                "ground_stated_in_notice": stated,
-                "notice_quote": notice_quote, "supported": supported,
-                "scope_exceeded": exceeded, "basis": basis}
+    def panel(self, conditions, exclusions=None, sufficient=True,
+              contradiction=False, contradiction_quote="",
+              contradiction_id="", trigger=None, fraud=None):
+        """Build a panel answer. `conditions` and `exclusions` are lists of
+        (ref, finding, quote, evidence_id)."""
+        answer = {
+            "conditions": [
+                {"ref": row[0], "finding": row[1], "quote": row[2],
+                 "evidence_id": row[3], "basis": "synthetic test row"}
+                for row in conditions],
+            "exclusions": [
+                {"ref": row[0], "finding": row[1], "quote": row[2],
+                 "evidence_id": row[3], "basis": "synthetic test row"}
+                for row in (exclusions or [])],
+            "evidence": {"sufficient": sufficient,
+                         "contradiction": contradiction,
+                         "quote": contradiction_quote,
+                         "evidence_id": contradiction_id,
+                         "basis": "synthetic test row"},
+            "trigger": trigger or {"value_found": False, "value": 0,
+                                   "quote": "", "evidence_id": ""},
+            "fraud": fraud or {"finding": "NOT_ASKED", "quote": "",
+                               "evidence_id": "", "basis": ""},
+        }
+        return json.dumps(answer)
 
     @staticmethod
     def _pattern(url):
@@ -167,29 +324,56 @@ class Harness:
 
     # -- contract convenience ----------------------------------------------
 
-    def register(self, window=0, policy=POLICY):
+    def register(self, definition=None, policy=POLICY_PROPERTY,
+                 coverage_type="small commercial property"):
         self.vm.sender = self.insurer
-        return self.contract.register_clause_set(
-            "Household contents, synthetic edition 1", url_for(policy),
-            doc_sha(policy), window)
+        return self.contract.register_policy(
+            url_for(policy), doc_sha(policy), coverage_type,
+            json.dumps(definition or PROPERTY_DEFINITION))
 
-    def open_review(self, clause_set_id, notice=NOTICE_UNOCCUPIED,
-                    clause_refs=None, grounds=None, reference="SYN-0041",
-                    sender=None, notice_sha=None, notice_url=None):
+    def open_challenge(self, policy_id, required=None, deadline=DEADLINE,
+                       question=None, sender=None):
+        self.vm.sender = sender or self.insurer
+        return self.contract.open_claim_challenge(
+            policy_id,
+            question or "Does this claim satisfy the conditions of cover for "
+                        "the damage claimed, and does any exclusion apply?",
+            json.dumps(required if required is not None
+                       else ["incident_report", "invoice"]),
+            deadline)
+
+    def submit(self, claim_id, evidence=None, incident=None,
+               reference="SYN-2041", sender=None):
         self.vm.sender = sender or self.claimant
-        return self.contract.open_review(
-            clause_set_id,
-            notice_url or url_for(notice),
-            notice_sha or doc_sha(notice),
-            reference,
-            ["Clause 4.2"] if clause_refs is None else clause_refs,
-            ["the insured address was left unoccupied for more than sixty "
-             "consecutive days"] if grounds is None else grounds,
-        )
+        documents = []
+        for item in (evidence if evidence is not None else STORM_EVIDENCE):
+            documents.append({
+                "evidence_id": item["evidence_id"], "kind": item["kind"],
+                "url": item.get("url", url_for(item.get("name", ""))),
+                "sha256": item.get("sha256",
+                                   doc_sha(item["name"])
+                                   if "name" in item else "0" * 64),
+            })
+        return self.contract.submit_claim(
+            claim_id, reference,
+            json.dumps(incident if incident is not None else STORM_INCIDENT),
+            json.dumps(documents))
 
-    def resolve(self, review_id, sender=None):
+    def resolve(self, submission_id, sender=None):
         self.vm.sender = sender or self.stranger
-        return self.contract.resolve_review(review_id)
+        return self.contract.resolve_submission(submission_id)
+
+    def set_clock(self, timestamp):
+        """Move the transaction clock the contract reads.
+
+        On a real network every transaction carries its own datetime. Direct
+        Mode injects one when the contract is loaded and `vm.warp` after that
+        does not reach it, so a test that needs a later transaction moves the
+        injected value as well. Nothing in the contract is patched.
+        """
+        self.vm.warp(timestamp)
+        module = sys.modules[type(self.contract).__module__]
+        module.gl.message_raw["datetime"] = timestamp
 
     def clear(self):
         self.vm.clear_mocks()
@@ -209,8 +393,9 @@ def harness():
 
 @pytest.fixture
 def ready(harness):
-    """A clause set registered and both documents reachable: the state every
-    verdict test starts from."""
-    clause_set_id = harness.register()
-    harness.mock_doc(POLICY)
-    return harness, clause_set_id
+    """A property policy registered, a challenge open, and every document
+    reachable: the state most adjudication tests start from."""
+    policy_id = harness.register()
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    return harness, policy_id, claim_id

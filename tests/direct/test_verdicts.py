@@ -1,501 +1,547 @@
 """Every verdict the contract can reach, derived from a mocked reading of
 real fixture bytes. The panel's answer is mocked; the admission, grounding,
-precedence, storage and counter code under test is the contract's own."""
+trigger comparison, precedence, storage and counter code under test is the
+contract's own."""
 
 import json
 
-from conftest import (NOTICE_DIRECTED, NOTICE_FLOOD, NOTICE_JEWELLERY,
-                      NOTICE_LATE, NOTICE_UNOCCUPIED, POLICY, TODAY_DATE,
-                      doc_sha, doc_text, quote_from, sha_of,
-                      url_for)
+from conftest import (CROP_DEFINITION, CROP_EVIDENCE, CROP_INCIDENT,
+                      DIRECTED_EVIDENCE, DIRECTED_REPORT, FRAUD_DEFINITION,
+                      GRADUAL_EVIDENCE, GRADUAL_REPORT, HOLDING_STATEMENT,
+                      NO_ENTRY_REPORT, POLICY_CROP, POLICY_PROPERTY,
+                      RAINFALL_RECORD, STORM_INVOICE, STORM_REPORT,
+                      THEFT_DEFINITION, THEFT_EVIDENCE, THEFT_INCIDENT,
+                      TODAY_DATE, quote_from)
 
 
-CLAUSE_42 = quote_from(POLICY, "The insurer does not cover loss or damage")
-CLAUSE_33 = quote_from(POLICY, "The insured must notify the insurer")
-CLAUSE_54 = quote_from(POLICY, "Cover for jewellery is limited")
-NOTICE_42 = quote_from(NOTICE_UNOCCUPIED, "no person authorised by you slept")
-NOTICE_33 = quote_from(NOTICE_LATE, "Because the notification was late")
-NOTICE_54 = quote_from(NOTICE_JEWELLERY, "we are declining the claim in its")
-NOTICE_94 = quote_from(NOTICE_FLOOD, "Clause 9.4 of the wording excludes")
-NOTICE_DIR = quote_from(NOTICE_DIRECTED, "No person authorised by you slept")
-
-LATE_GROUND = ["the claim was notified after thirty days so the cover ended"]
-JEWELLERY_GROUND = ["the whole claim is declined because the jewellery limit "
-                    "was exceeded"]
-FLOOD_GROUND = ["the loss was caused by flood or rising groundwater"]
+STORM_EVENT = quote_from(STORM_REPORT, "On the night of 2 to 3 March 2026 a")
+STORM_NOTICE = quote_from(STORM_REPORT, "The insured became aware of the loss")
+INVOICE_COST = quote_from(STORM_INVOICE, "Strip and replace damaged stockroom")
+OCCUPIED = quote_from(STORM_REPORT, "The unit was in use up to and including")
+GRADUAL = quote_from(GRADUAL_REPORT, "In my opinion this damage has developed")
+NO_ENTRY = quote_from(NO_ENTRY_REPORT, "The side door was found closed but")
+RAINFALL = quote_from(RAINFALL_RECORD, "Cumulative rainfall recorded: 182")
+HOLDING = quote_from(HOLDING_STATEMENT, "This claim is made for the holding")
+DIRECTED_EVENT = quote_from(DIRECTED_REPORT,
+                            "On the night of 2 to 3 March 2026 a")
 
 
-def _resolve_one(harness, clause_set_id, notice, clause_refs, grounds,
-                 row_kwargs, reference="SYN-TEST"):
-    harness.mock_doc(notice)
-    review_id = harness.open_review(clause_set_id, notice=notice,
-                                    clause_refs=clause_refs, grounds=grounds,
-                                    reference=reference)
-    harness.mock_panel(harness.panel_json([harness.row(**row_kwargs)]))
-    verdict = harness.resolve(review_id)
-    return review_id, verdict
+def _all_met():
+    return [("C1", "MET", STORM_EVENT, "E1"),
+            ("C2", "MET", STORM_NOTICE, "E1"),
+            ("C3", "MET", INVOICE_COST, "E2")]
 
 
-def test_a_ground_the_clause_reaches_is_supported(ready):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_42,
-             supported="YES"))
-    assert verdict == "DENIAL_SUPPORTED"
-    review = harness.contract.get_review(review_id)
-    assert review["status"] == "RESOLVED"
-    assert review["verdict"] == "DENIAL_SUPPORTED"
-    assert review["policy_status"] == "EXAMINED"
-    assert review["notice_status"] == "EXAMINED"
-    assert review["panel_state"] == "READ"
-    assert review["rounds_used"] == 1
-    assert review["resolved_on"] == TODAY_DATE
-    assert review["directed_text_hits"] == 0
-    ground = harness.contract.get_grounds(review_id)[0]
-    assert ground["outcome"] == "SUPPORTED"
-    assert ground["clause_quote"] == " ".join(CLAUSE_42.split())
-    assert ground["clause_ref_literal"] is True
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is True
-    assert harness.contract.is_denial_unsupported(review_id,
-                                                  TODAY_DATE) is False
-    assert harness.contract.is_consumable(review_id, TODAY_DATE) is True
-    assert harness.contract.freshness(review_id, TODAY_DATE) == "RELIABLE"
-    outcome = harness.contract.review_outcome(review_id, TODAY_DATE)
-    assert outcome["grounds_supported"] == 1
-    assert outcome["grounds_failing"] == 0
-    assert outcome["is_current_version"] is True
-    record = harness.contract.clause_record(clause_set_id, 1, "Clause 4.2")
-    assert record["SUPPORTED"] == 1
+def _no_exclusions():
+    return [("X1", "NOT_EVIDENCED", "", ""),
+            ("X2", "NOT_EVIDENCED", "", "")]
+
+
+def test_a_claim_that_meets_every_condition_is_supported(ready):
+    harness, policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
+    assert harness.resolve(submission_id) == "COVERAGE_SUPPORTED"
+
+    record = harness.contract.get_submission(submission_id)
+    assert record["status"] == "RESOLVED"
+    assert record["verdict"] == "COVERAGE_SUPPORTED"
+    assert record["evidence_status"] == "EVIDENCE_SUFFICIENT"
+    assert record["panel_state"] == "ASSESSED"
+    assert record["policy_status"] == "EVIDENCE_REACHABLE"
+    assert record["rounds_used"] == 1
+    assert record["resolved_on"] == TODAY_DATE
+    assert record["trigger_state"] == "NOT_DECLARED"
+    assert record["fraud_finding"] == "NOT_ASKED"
+    assert record["directed_text_hits"] == 0
+    for item in record["evidence_refs"]:
+        assert item["status"] == "EVIDENCE_REACHABLE"
+        assert item["reason"] == ""
+        assert item["byte_count"] > 0
+
+    verdict = harness.contract.get_verdict(submission_id)
+    assert verdict["verdict"] == "COVERAGE_SUPPORTED"
+    assert verdict["coverage_conditions_met"] is True
+    assert verdict["exclusion_applies"] is False
+    assert verdict["evidence_status"] == "EVIDENCE_SUFFICIENT"
+    assert verdict["criteria"] == {
+        "policy_version_verified": True,
+        "covered_event_supported": True,
+        "required_conditions_met": True,
+        "exclusion_evidence_found": False,
+    }
+    assert verdict["evidence_refs"] == ["E1", "E2"]
+    assert verdict["bounded_reason"] == ""
+    assert verdict["policy_hash"] == harness.contract.get_policy_hash(claim_id)
+
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is True
+    assert harness.contract.is_consumable(submission_id, TODAY_DATE) is True
+    assert harness.contract.freshness(submission_id,
+                                      TODAY_DATE) == "RELIABLE"
+    assert harness.contract.get_evidence_status(
+        submission_id) == "EVIDENCE_SUFFICIENT"
+    record = harness.contract.policy_record(policy_id, 1)
+    assert record["COVERAGE_SUPPORTED"] == 1
     assert record["total"] == 1
-    summary = harness.contract.clause_set_record(clause_set_id, 1)
-    assert summary["DENIAL_SUPPORTED"] == 1
     assert harness.contract.get_stats()["resolved"] == 1
 
 
-def test_a_ground_the_clause_does_not_reach_is_unsupported(ready):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_one(
-        harness, clause_set_id, NOTICE_LATE, ["Clause 3.3"], LATE_GROUND,
-        dict(clause_quote=CLAUSE_33, notice_quote=NOTICE_33, supported="NO"))
-    assert verdict == "DENIAL_UNSUPPORTED"
-    assert harness.contract.get_grounds(review_id)[0]["outcome"] \
-        == "UNSUPPORTED"
-    assert harness.contract.is_denial_unsupported(review_id,
-                                                  TODAY_DATE) is True
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is False
-    assert harness.contract.is_consumable(review_id, TODAY_DATE) is True
-    outcome = harness.contract.review_outcome(review_id, TODAY_DATE)
-    assert outcome["grounds_failing"] == 1
-    assert harness.contract.clause_record(clause_set_id, 1,
-                                          "Clause 3.3")["UNSUPPORTED"] == 1
-    assert harness.contract.clause_set_record(
-        clause_set_id, 1)["DENIAL_UNSUPPORTED"] == 1
+def test_a_condition_that_is_not_met_is_not_coverage(harness):
+    policy_id = harness.register(THEFT_DEFINITION)
+    claim_id = harness.open_challenge(policy_id, required=["incident_report"])
+    harness.mock_docs(POLICY_PROPERTY, NO_ENTRY_REPORT)
+    submission_id = harness.submit(claim_id, evidence=THEFT_EVIDENCE,
+                                   incident=THEFT_INCIDENT,
+                                   reference="SYN-2063")
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", quote_from(NO_ENTRY_REPORT,
+                                  "The insured attended the unit on the"),
+          "E1"),
+         ("C4", "NOT_MET", NO_ENTRY, "E1")],
+        [("X1", "NOT_EVIDENCED", "", "")]))
+    assert harness.resolve(submission_id) == "COVERAGE_NOT_ESTABLISHED"
 
-
-def test_a_clause_applied_past_its_scope_is_overbroad(ready):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_one(
-        harness, clause_set_id, NOTICE_JEWELLERY, ["Clause 5.4"],
-        JEWELLERY_GROUND,
-        dict(clause_quote=CLAUSE_54, notice_quote=NOTICE_54, supported="YES",
-             exceeded=True))
-    assert verdict == "DENIAL_OVERBROAD"
-    assert harness.contract.get_grounds(review_id)[0]["outcome"] == "OVERBROAD"
-    assert harness.contract.is_consumable(review_id, TODAY_DATE) is True
-    # Overbroad is neither a clean upholding nor a plain lack of support:
-    # both convenience gates say no, and the consumer reads the verdict.
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is False
-    assert harness.contract.is_denial_unsupported(review_id,
+    verdict = harness.contract.get_verdict(submission_id)
+    assert verdict["coverage_conditions_met"] is False
+    assert verdict["exclusion_applies"] is False
+    assert verdict["criteria"]["required_conditions_met"] is False
+    assert verdict["criteria"]["covered_event_supported"] is True
+    assert "C4: not met" in verdict["bounded_reason"]
+    # Not established is not fraud, and not a finding against the claimant.
+    assert verdict["fraud_finding"] == "NOT_ASKED"
+    assert harness.contract.is_coverage_supported(submission_id,
                                                   TODAY_DATE) is False
-    assert harness.contract.clause_set_record(
-        clause_set_id, 1)["DENIAL_OVERBROAD"] == 1
+    assert harness.contract.is_consumable(submission_id, TODAY_DATE) is True
 
 
-def test_a_clause_that_is_not_in_the_version_is_miscited(ready):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_one(
-        harness, clause_set_id, NOTICE_FLOOD, ["Clause 9.4"], FLOOD_GROUND,
-        dict(located=False, clause_quote="", notice_quote=NOTICE_94,
-             supported="UNCLEAR"))
-    assert verdict == "CLAUSE_MISCITED"
-    ground = harness.contract.get_grounds(review_id)[0]
-    assert ground["outcome"] == "CLAUSE_ABSENT"
-    assert ground["clause_ref_literal"] is False
-    assert ground["assertion_literal"] is False
-    assert harness.contract.is_denial_unsupported(review_id,
-                                                  TODAY_DATE) is True
-    assert harness.contract.clause_set_record(
-        clause_set_id, 1)["CLAUSE_MISCITED"] == 1
+def test_an_evidenced_exclusion_outranks_the_conditions(harness):
+    policy_id = harness.register()
+    claim_id = harness.open_challenge(
+        policy_id, required=["incident_report", "invoice"])
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE,
+                      GRADUAL_REPORT)
+    submission_id = harness.submit(claim_id, evidence=GRADUAL_EVIDENCE)
+    harness.mock_panel(harness.panel(
+        _all_met(),
+        [("X1", "EVIDENCED", GRADUAL, "E3"),
+         ("X2", "NOT_EVIDENCED", "", "")]))
+    # Every condition was met and the exclusion still decides it.
+    assert harness.resolve(submission_id) == "EXCLUSION_APPLIES"
 
-
-def test_a_ground_the_notice_does_not_state_is_misstated(ready):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"],
-        ["the insured set fire to the premises deliberately"],
-        dict(clause_quote=CLAUSE_42, stated=False, notice_quote="",
-             supported="UNCLEAR"))
-    assert verdict == "GROUNDS_MISSTATED"
-    assert harness.contract.get_grounds(review_id)[0]["outcome"] \
-        == "NOT_IN_NOTICE"
-    assert harness.contract.clause_set_record(
-        clause_set_id, 1)["GROUNDS_MISSTATED"] == 1
-
-
-def test_an_unclear_reading_is_inconclusive_and_retryable(ready):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_42,
-             supported="UNCLEAR"))
-    assert verdict == "INCONCLUSIVE"
-    review = harness.contract.get_review(review_id)
-    assert review["status"] == "RETRYABLE"
-    assert review["rounds_used"] == 1
-    assert harness.contract.is_consumable(review_id, TODAY_DATE) is False
-    assert harness.contract.freshness(review_id, TODAY_DATE) == "UNKNOWN"
-    # Nothing was counted: an unsettled review is not a clause's record.
-    assert harness.contract.clause_record(clause_set_id, 1,
-                                          "Clause 4.2")["total"] == 0
-    assert harness.contract.get_stats()["resolved"] == 0
-    harness.clear()
-    harness.mock_doc(POLICY)
-    harness.mock_doc(NOTICE_UNOCCUPIED)
-    harness.mock_panel(harness.panel_json([harness.row(
-        clause_quote=CLAUSE_42, notice_quote=NOTICE_42, supported="YES")]))
-    harness.vm.sender = harness.stranger
-    assert harness.contract.retry_review(review_id) == "DENIAL_SUPPORTED"
-    review = harness.contract.get_review(review_id)
-    assert review["status"] == "RESOLVED"
-    assert review["rounds_used"] == 2
-    assert harness.contract.get_receipt(review_id, 1) != ""
-    assert harness.contract.get_receipt(review_id, 2) != ""
-    assert harness.contract.clause_record(clause_set_id, 1,
-                                          "Clause 4.2")["SUPPORTED"] == 1
-
-
-def test_rounds_run_out_and_the_review_settles_unsettled(ready):
-    harness, clause_set_id = ready
-    review_id, _ = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_42,
-             supported="UNCLEAR"))
-    harness.vm.sender = harness.stranger
-    assert harness.contract.retry_review(review_id) == "INCONCLUSIVE"
-    assert harness.contract.review_status(review_id) == "RETRYABLE"
-    assert harness.contract.retry_review(review_id) == "INCONCLUSIVE"
-    review = harness.contract.get_review(review_id)
-    assert review["rounds_used"] == 3
-    assert review["status"] == "RESOLVED"
-    assert review["verdict"] == "INCONCLUSIVE"
-    assert harness.contract.is_consumable(review_id, TODAY_DATE) is False
-    with harness.vm.expect_revert("illegal transition from RESOLVED"):
-        harness.contract.retry_review(review_id)
-    # An exhausted review counts as resolved but adds nothing to the record
-    # of a clause: nothing was decided about that clause.
-    assert harness.contract.get_stats()["resolved"] == 1
-    assert harness.contract.clause_record(clause_set_id, 1,
-                                          "Clause 4.2")["total"] == 1
-    assert harness.contract.clause_record(clause_set_id, 1,
-                                          "Clause 4.2")["UNDECIDED"] == 1
-    assert harness.contract.clause_set_record(
-        clause_set_id, 1)["DENIAL_SUPPORTED"] == 0
-
-
-def test_an_unreachable_notice_is_not_a_finding(ready):
-    harness, clause_set_id = ready
-    harness.mock_doc(NOTICE_UNOCCUPIED, status=404, body="not found")
-    review_id = harness.open_review(clause_set_id)
-    assert harness.resolve(review_id) == "RECORD_UNAVAILABLE"
-    review = harness.contract.get_review(review_id)
-    assert review["status"] == "RETRYABLE"
-    assert review["notice_status"] == "UNAVAILABLE"
-    assert review["policy_status"] == "EXAMINED"
-    assert review["panel_state"] == "SKIPPED"
-    assert harness.contract.get_grounds(review_id)[0]["outcome"] == "UNDECIDED"
-    assert harness.contract.is_consumable(review_id, TODAY_DATE) is False
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is False
-    assert harness.contract.is_denial_unsupported(review_id,
+    verdict = harness.contract.get_verdict(submission_id)
+    assert verdict["exclusion_applies"] is True
+    assert verdict["criteria"]["exclusion_evidence_found"] is True
+    assert verdict["criteria"]["required_conditions_met"] is True
+    assert "X1: evidenced" in verdict["bounded_reason"]
+    assert harness.contract.is_coverage_supported(submission_id,
                                                   TODAY_DATE) is False
+    findings = harness.contract.get_findings(submission_id)
+    assert findings["exclusions"][0]["quote"] != ""
+    assert findings["exclusions"][0]["evidence_id"] == "E3"
+
+
+def test_an_unclear_condition_is_inconclusive_and_retryable(ready):
+    harness, policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", STORM_EVENT, "E1"),
+         ("C2", "UNCLEAR", "", ""),
+         ("C3", "MET", INVOICE_COST, "E2")],
+        _no_exclusions()))
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+
+    record = harness.contract.get_submission(submission_id)
+    assert record["status"] == "RETRYABLE"
+    assert record["rounds_used"] == 1
+    assert harness.contract.is_consumable(submission_id, TODAY_DATE) is False
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is False
+    # Nothing was counted: an unsettled claim is not a policy's record.
+    assert harness.contract.policy_record(policy_id, 1)["total"] == 0
+
     harness.clear()
-    harness.mock_doc(POLICY)
-    harness.mock_doc(NOTICE_UNOCCUPIED)
-    harness.mock_panel(harness.panel_json([harness.row(
-        clause_quote=CLAUSE_42, notice_quote=NOTICE_42, supported="NO")]))
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
     harness.vm.sender = harness.stranger
-    assert harness.contract.retry_review(review_id) == "DENIAL_UNSUPPORTED"
+    assert harness.contract.retry_submission(
+        submission_id) == "COVERAGE_SUPPORTED"
+    record = harness.contract.get_submission(submission_id)
+    assert record["status"] == "RESOLVED"
+    assert record["rounds_used"] == 2
+    assert harness.contract.get_receipt(submission_id, 1) != ""
+    assert harness.contract.get_receipt(submission_id, 2) != ""
+    assert harness.contract.policy_record(policy_id,
+                                          1)["COVERAGE_SUPPORTED"] == 1
+
+
+def test_contradictory_evidence_is_inconclusive(harness):
+    policy_id = harness.register()
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE,
+                      GRADUAL_REPORT)
+    submission_id = harness.submit(claim_id, evidence=GRADUAL_EVIDENCE)
+    harness.mock_panel(harness.panel(
+        _all_met(), _no_exclusions(), contradiction=True,
+        contradiction_quote=GRADUAL, contradiction_id="E3"))
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    assert harness.contract.get_evidence_status(
+        submission_id) == "EVIDENCE_CONTRADICTORY"
+    assert harness.contract.get_submission(submission_id)["status"] \
+        == "RETRYABLE"
+
+
+def test_insufficient_evidence_is_never_a_coverage_verdict(ready):
+    harness, _policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions(),
+                                     sufficient=False))
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    assert harness.contract.get_evidence_status(
+        submission_id) == "EVIDENCE_INSUFFICIENT"
+
+
+def test_a_missing_required_kind_is_never_adjudicated(harness):
+    harness.register()
+    policy_id = "pol-1"
+    claim_id = harness.open_challenge(
+        policy_id, required=["incident_report", "invoice"])
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT)
+    # The invoice is committed but cannot be fetched, so a kind the
+    # challenge requires is missing from the readable record.
+    harness.mock_doc(STORM_INVOICE, status=404, body="not found")
+    submission_id = harness.submit(claim_id)
+    assert harness.resolve(submission_id) == "EVIDENCE_UNAVAILABLE"
+
+    record = harness.contract.get_submission(submission_id)
+    assert record["status"] == "RETRYABLE"
+    assert record["evidence_status"] == "EVIDENCE_UNAVAILABLE"
+    assert record["panel_state"] == "SKIPPED"
+    assert record["evidence_refs"][1]["status"] == "EVIDENCE_UNAVAILABLE"
+    assert record["evidence_refs"][1]["reason"] == "FETCH_FAILED"
+    findings = harness.contract.get_findings(submission_id)
+    assert [row["finding"] for row in findings["conditions"]] \
+        == ["NOT_ASSESSED"] * 3
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is False
+
+    harness.clear()
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
+    harness.vm.sender = harness.stranger
+    assert harness.contract.retry_submission(
+        submission_id) == "COVERAGE_SUPPORTED"
 
 
 def test_a_substituted_document_is_not_the_document(ready):
-    harness, clause_set_id = ready
-    harness.mock_doc(NOTICE_UNOCCUPIED,
-                     body=doc_text(NOTICE_UNOCCUPIED) + "\nedited later\n")
-    review_id = harness.open_review(clause_set_id)
-    assert harness.resolve(review_id) == "RECORD_UNAVAILABLE"
-    assert harness.contract.get_review(review_id)["notice_status"] \
-        == "HASH_MISMATCH"
+    harness, _policy_id, claim_id = ready
+    harness.clear()
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT)
+    from conftest import doc_text
+    harness.mock_doc(STORM_INVOICE,
+                     body=doc_text(STORM_INVOICE) + "\nedited later\n")
+    submission_id = harness.submit(claim_id)
+    assert harness.resolve(submission_id) == "EVIDENCE_UNAVAILABLE"
+    record = harness.contract.get_submission(submission_id)
+    assert record["evidence_refs"][1]["reason"] == "HASH_MISMATCH"
 
 
-def test_an_oversized_document_is_refused_before_it_is_read(ready):
-    harness, clause_set_id = ready
-    oversized = "x" * 200001
-    harness.mock_doc(NOTICE_UNOCCUPIED, body=oversized)
-    review_id = harness.open_review(clause_set_id,
-                                    notice_sha=sha_of(oversized))
-    assert harness.resolve(review_id) == "RECORD_UNAVAILABLE"
-    assert harness.contract.get_review(review_id)["notice_status"] \
-        == "TOO_LARGE"
-    assert harness.contract.get_review(review_id)["panel_state"] == "SKIPPED"
+def test_an_unreadable_policy_is_never_a_finding(ready):
+    harness, _policy_id, claim_id = ready
+    harness.clear()
+    harness.mock_doc(POLICY_PROPERTY, status=503, body="unavailable")
+    harness.mock_docs(STORM_REPORT, STORM_INVOICE)
+    submission_id = harness.submit(claim_id)
+    assert harness.resolve(submission_id) == "EVIDENCE_UNAVAILABLE"
+    record = harness.contract.get_submission(submission_id)
+    assert record["policy_status"] == "EVIDENCE_UNAVAILABLE"
+    assert record["panel_state"] == "SKIPPED"
+    verdict = harness.contract.get_verdict(submission_id)
+    assert verdict["criteria"]["policy_version_verified"] is False
 
 
-def test_an_empty_document_is_not_a_finding(ready):
-    harness, clause_set_id = ready
-    blank = "   \n  "
-    harness.mock_doc(NOTICE_UNOCCUPIED, body=blank)
-    review_id = harness.open_review(clause_set_id, notice_sha=sha_of(blank))
-    assert harness.resolve(review_id) == "RECORD_UNAVAILABLE"
-    assert harness.contract.get_review(review_id)["notice_status"] \
-        == "UNREADABLE"
+def test_evidence_that_addresses_its_reader_cannot_win_coverage(harness):
+    policy_id = harness.register()
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, DIRECTED_REPORT, STORM_INVOICE)
+    submission_id = harness.submit(claim_id, evidence=DIRECTED_EVIDENCE,
+                                   reference="SYN-2074")
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", DIRECTED_EVENT, "E1"),
+         ("C2", "MET", quote_from(DIRECTED_REPORT,
+                                  "The insured became aware of the loss"),
+          "E1"),
+         ("C3", "MET", INVOICE_COST, "E2")],
+        _no_exclusions()))
+    # Every condition was read as met, and the verdict is still not
+    # coverage: the evidence instructs whoever reads it.
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    record = harness.contract.get_submission(submission_id)
+    assert record["directed_text_hits"] >= 3
+    assert record["status"] == "RETRYABLE"
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is False
+    # The findings are kept: the claim was read, and what it says is on the
+    # record even though it cannot settle.
+    findings = harness.contract.get_findings(submission_id)
+    assert findings["conditions"][0]["finding"] == "MET"
 
 
-def test_an_unreachable_policy_document_is_not_a_finding(harness):
-    clause_set_id = harness.register()
-    harness.mock_doc(POLICY, status=503, body="unavailable")
-    harness.mock_doc(NOTICE_UNOCCUPIED)
-    review_id = harness.open_review(clause_set_id)
-    assert harness.resolve(review_id) == "RECORD_UNAVAILABLE"
-    review = harness.contract.get_review(review_id)
-    assert review["policy_status"] == "UNAVAILABLE"
-    assert review["notice_status"] == "EXAMINED"
+def test_a_parametric_trigger_is_compared_in_code(harness):
+    policy_id = harness.register(CROP_DEFINITION, policy=POLICY_CROP,
+                                 coverage_type="parametric drought")
+    claim_id = harness.open_challenge(
+        policy_id, required=["holding_statement", "weather_record"],
+        question="Was the insured rainfall trigger met for the named "
+                 "station and window?")
+    harness.mock_docs(POLICY_CROP, HOLDING_STATEMENT, RAINFALL_RECORD)
+    submission_id = harness.submit(claim_id, evidence=CROP_EVIDENCE,
+                                   incident=CROP_INCIDENT,
+                                   reference="SYN-3012")
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", HOLDING, "E1"),
+         ("C2", "MET", RAINFALL, "E2")],
+        [("X1", "NOT_EVIDENCED", "", "")],
+        trigger={"value_found": True, "value": 182, "quote": RAINFALL,
+                 "evidence_id": "E2"}))
+    # 182 millimetres against a threshold of at most 220: the trigger fired.
+    assert harness.resolve(submission_id) == "COVERAGE_SUPPORTED"
+    record = harness.contract.get_submission(submission_id)
+    assert record["trigger_state"] == "MET"
+    assert record["trigger_value"] == 182
 
 
-def test_a_notice_that_addresses_its_reader_cannot_be_upheld(ready):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_one(
-        harness, clause_set_id, NOTICE_DIRECTED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_DIR,
-             supported="YES"))
-    # Every ground was read as supported, and the verdict is still not
-    # DENIAL_SUPPORTED: the notice carries instructions to its reader.
-    assert verdict == "INCONCLUSIVE"
-    review = harness.contract.get_review(review_id)
-    assert review["directed_text_hits"] >= 3
-    assert review["status"] == "RETRYABLE"
-    assert harness.contract.get_grounds(review_id)[0]["outcome"] == "SUPPORTED"
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is False
+def test_a_trigger_that_did_not_fire_is_not_coverage(harness):
+    policy_id = harness.register(CROP_DEFINITION, policy=POLICY_CROP,
+                                 coverage_type="parametric drought")
+    claim_id = harness.open_challenge(
+        policy_id, required=["holding_statement", "weather_record"])
+    harness.mock_docs(POLICY_CROP, HOLDING_STATEMENT, RAINFALL_RECORD)
+    submission_id = harness.submit(claim_id, evidence=CROP_EVIDENCE,
+                                   incident=CROP_INCIDENT,
+                                   reference="SYN-3013")
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", HOLDING, "E1"),
+         ("C2", "MET", RAINFALL, "E2")],
+        [("X1", "NOT_EVIDENCED", "", "")],
+        trigger={"value_found": True, "value": 486,
+                 "quote": quote_from(RAINFALL_RECORD,
+                                     "Cumulative rainfall recorded: 486"),
+                 "evidence_id": "E2"}))
+    # 486 against at most 220. Both conditions are met and the measurement
+    # still decides it - the model never saw the threshold.
+    assert harness.resolve(submission_id) == "COVERAGE_NOT_ESTABLISHED"
+    record = harness.contract.get_submission(submission_id)
+    assert record["trigger_state"] == "NOT_MET"
+    assert record["trigger_value"] == 486
+    verdict = harness.contract.get_verdict(submission_id)
+    assert verdict["criteria"]["required_conditions_met"] is False
+    assert verdict["criteria"]["covered_event_supported"] is False
 
 
-def test_precedence_across_several_grounds(ready):
-    harness, clause_set_id = ready
-    harness.mock_doc(NOTICE_JEWELLERY)
-    review_id = harness.open_review(
-        clause_set_id, notice=NOTICE_JEWELLERY,
-        clause_refs=["Clause 5.4", "Clause 3.3"],
-        grounds=JEWELLERY_GROUND + LATE_GROUND)
-    harness.mock_panel(harness.panel_json([
-        harness.row(index=0, clause_quote=CLAUSE_54, notice_quote=NOTICE_54,
-                    supported="YES", exceeded=True),
-        harness.row(index=1, clause_quote=CLAUSE_33, notice_quote=NOTICE_54,
-                    supported="NO"),
-    ]))
-    # One overbroad ground and one unsupported ground: the stronger defect
-    # names the verdict.
-    assert harness.resolve(review_id) == "DENIAL_UNSUPPORTED"
-    outcomes = [row["outcome"]
-                for row in harness.contract.get_grounds(review_id)]
-    assert outcomes == ["OVERBROAD", "UNSUPPORTED"]
-    outcome = harness.contract.review_outcome(review_id, TODAY_DATE)
-    assert outcome["grounds_failing"] == 2
-    assert outcome["grounds_supported"] == 0
-    # Each clause keeps its own record even though the review has one verdict.
-    assert harness.contract.clause_record(clause_set_id, 1,
-                                          "Clause 5.4")["OVERBROAD"] == 1
-    assert harness.contract.clause_record(clause_set_id, 1,
-                                          "Clause 3.3")["UNSUPPORTED"] == 1
+def test_a_trigger_without_a_measurement_is_inconclusive(harness):
+    policy_id = harness.register(CROP_DEFINITION, policy=POLICY_CROP,
+                                 coverage_type="parametric drought")
+    claim_id = harness.open_challenge(
+        policy_id, required=["holding_statement", "weather_record"])
+    harness.mock_docs(POLICY_CROP, HOLDING_STATEMENT, RAINFALL_RECORD)
+    submission_id = harness.submit(claim_id, evidence=CROP_EVIDENCE,
+                                   incident=CROP_INCIDENT,
+                                   reference="SYN-3014")
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", HOLDING, "E1"),
+         ("C2", "MET", RAINFALL, "E2")],
+        [("X1", "NOT_EVIDENCED", "", "")],
+        trigger={"value_found": False, "value": 0, "quote": "",
+                 "evidence_id": ""}))
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    assert harness.contract.get_submission(
+        submission_id)["trigger_state"] == "UNREADABLE"
 
 
-def test_a_misstated_ground_outranks_a_miscited_clause(ready):
-    harness, clause_set_id = ready
-    harness.mock_doc(NOTICE_FLOOD)
-    review_id = harness.open_review(
-        clause_set_id, notice=NOTICE_FLOOD,
-        clause_refs=["Clause 9.4", "Clause 8.5"],
-        grounds=FLOOD_GROUND + ["the damage was gradual wear and tear"])
-    harness.mock_panel(harness.panel_json([
-        harness.row(index=0, located=False, clause_quote="",
-                    notice_quote=NOTICE_94, supported="UNCLEAR"),
-        harness.row(index=1, clause_quote=quote_from(
-            POLICY, "The insurer does not cover damage that is the result"),
-            stated=False, notice_quote="", supported="UNCLEAR"),
-    ]))
-    assert harness.resolve(review_id) == "GROUNDS_MISSTATED"
+def test_fraud_is_only_found_where_the_policy_asks_and_the_words_are_there(
+        harness):
+    policy_id = harness.register(FRAUD_DEFINITION)
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(
+        _all_met(), _no_exclusions(),
+        fraud={"finding": "INDICATORS_FOUND", "quote": INVOICE_COST,
+               "evidence_id": "E2", "basis": "synthetic test row"}))
+    assert harness.resolve(submission_id) == "FRAUD_INDICATORS_FOUND"
+    record = harness.contract.get_submission(submission_id)
+    assert record["fraud_finding"] == "INDICATORS_FOUND"
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is False
+    assert harness.contract.is_consumable(submission_id, TODAY_DATE) is True
 
 
-def test_an_unsupported_ground_outranks_an_undecided_one(ready):
-    harness, clause_set_id = ready
-    harness.mock_doc(NOTICE_LATE)
-    review_id = harness.open_review(
-        clause_set_id, notice=NOTICE_LATE,
-        clause_refs=["Clause 3.3", "Clause 6.1"],
-        grounds=LATE_GROUND + ["the insured failed to take reasonable care"])
-    harness.mock_panel(harness.panel_json([
-        harness.row(index=0, clause_quote=CLAUSE_33, notice_quote=NOTICE_33,
-                    supported="NO"),
-        harness.row(index=1, clause_quote=quote_from(
-            POLICY, "The insured must take reasonable care"),
-            notice_quote=NOTICE_33, supported="UNCLEAR"),
-    ]))
-    assert harness.resolve(review_id) == "DENIAL_UNSUPPORTED"
+def test_an_accusation_without_the_words_does_not_stand(harness):
+    policy_id = harness.register(FRAUD_DEFINITION)
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(
+        _all_met(), _no_exclusions(),
+        fraud={"finding": "INDICATORS_FOUND",
+               "quote": "the insured admitted inventing the whole loss",
+               "evidence_id": "E2", "basis": "synthetic test row"}))
+    # The quote is not in the document it names, so the accusation is
+    # downgraded to uncertainty - never to its opposite, and never to a
+    # finding of fraud.
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    assert harness.contract.get_submission(
+        submission_id)["fraud_finding"] == "UNCLEAR"
 
 
-def test_every_ground_must_stand_for_a_denial_to_stand(ready):
-    harness, clause_set_id = ready
-    harness.mock_doc(NOTICE_JEWELLERY)
-    review_id = harness.open_review(
-        clause_set_id, notice=NOTICE_JEWELLERY,
-        clause_refs=["Clause 5.4", "Clause 3.3"],
-        grounds=JEWELLERY_GROUND + LATE_GROUND)
-    harness.mock_panel(harness.panel_json([
-        harness.row(index=0, clause_quote=CLAUSE_54, notice_quote=NOTICE_54,
-                    supported="YES"),
-        harness.row(index=1, clause_quote=CLAUSE_33, notice_quote=NOTICE_54,
-                    supported="YES"),
-    ]))
-    assert harness.resolve(review_id) == "DENIAL_SUPPORTED"
-    assert harness.contract.review_outcome(
-        review_id, TODAY_DATE)["grounds_supported"] == 2
+def test_fraud_cannot_be_found_when_the_policy_never_asked(ready):
+    harness, _policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(
+        _all_met(), _no_exclusions(),
+        fraud={"finding": "INDICATORS_FOUND", "quote": INVOICE_COST,
+               "evidence_id": "E2", "basis": "synthetic test row"}))
+    # The policy declares no fraud question, so an answer to one is not a
+    # usable answer at all.
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    assert harness.contract.get_submission(
+        submission_id)["panel_state"] == "INVALID"
 
 
-def test_a_resolved_review_is_terminal(ready):
-    harness, clause_set_id = ready
-    review_id, _ = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_42, supported="YES"))
+def test_rounds_run_out_and_the_claim_settles_unsettled(ready):
+    harness, policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(
+        [("C1", "UNCLEAR", "", ""), ("C2", "UNCLEAR", "", ""),
+         ("C3", "UNCLEAR", "", "")], _no_exclusions()))
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    harness.vm.sender = harness.stranger
+    assert harness.contract.retry_submission(submission_id) == "INCONCLUSIVE"
+    assert harness.contract.retry_submission(submission_id) == "INCONCLUSIVE"
+    record = harness.contract.get_submission(submission_id)
+    assert record["rounds_used"] == 3
+    assert record["status"] == "RESOLVED"
+    assert record["verdict"] == "INCONCLUSIVE"
+    assert harness.contract.is_consumable(submission_id, TODAY_DATE) is False
     with harness.vm.expect_revert("illegal transition from RESOLVED"):
-        harness.contract.resolve_review(review_id)
+        harness.contract.retry_submission(submission_id)
+    # An exhausted claim is counted, as the claim that could not be
+    # settled: how often a policy's claims end that way is exactly the
+    # signal the record exists to carry.
+    assert harness.contract.get_stats()["resolved"] == 1
+    record = harness.contract.policy_record(policy_id, 1)
+    assert record["INCONCLUSIVE"] == 1
+    assert record["COVERAGE_SUPPORTED"] == 0
+    assert record["total"] == 1
+
+
+def test_a_resolved_claim_is_terminal(ready):
+    harness, policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
+    harness.resolve(submission_id)
     with harness.vm.expect_revert("illegal transition from RESOLVED"):
-        harness.contract.retry_review(review_id)
+        harness.contract.resolve_submission(submission_id)
+    with harness.vm.expect_revert("illegal transition from RESOLVED"):
+        harness.contract.retry_submission(submission_id)
     harness.vm.sender = harness.claimant
     with harness.vm.expect_revert("illegal transition from RESOLVED"):
-        harness.contract.withdraw_review(review_id)
-    # The counter did not move a second time.
-    assert harness.contract.clause_set_record(
-        clause_set_id, 1)["DENIAL_SUPPORTED"] == 1
+        harness.contract.cancel_submission(submission_id)
+    assert harness.contract.policy_record(
+        policy_id, 1)["COVERAGE_SUPPORTED"] == 1
 
 
-def test_an_open_review_cannot_be_retried(ready):
-    harness, clause_set_id = ready
-    review_id = harness.open_review(clause_set_id)
-    with harness.vm.expect_revert("illegal transition from OPEN"):
-        harness.contract.retry_review(review_id)
+def test_the_claimant_may_cancel_before_settlement(ready):
+    harness, policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.vm.sender = harness.stranger
+    with harness.vm.expect_revert("only the claimant"):
+        harness.contract.cancel_submission(submission_id)
+    harness.vm.sender = harness.claimant
+    harness.contract.cancel_submission(submission_id)
+    record = harness.contract.get_submission(submission_id)
+    assert record["status"] == "CANCELLED"
+    assert record["verdict"] == "CANCELLED"
+    assert harness.contract.is_consumable(submission_id, TODAY_DATE) is False
+    assert harness.contract.freshness(submission_id, TODAY_DATE) == "UNKNOWN"
+    assert harness.contract.policy_record(policy_id, 1)["total"] == 0
 
 
 def test_the_receipt_is_the_ratified_payload(ready):
-    harness, clause_set_id = ready
-    review_id, _ = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_42, supported="YES"))
-    receipt = json.loads(harness.contract.get_receipt(review_id, 1))
+    harness, _policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
+    harness.resolve(submission_id)
+    receipt = json.loads(harness.contract.get_receipt(submission_id, 1))
     assert receipt["schema"] == "claimcourt/1"
-    assert receipt["review_id"] == review_id
+    assert receipt["submission_id"] == submission_id
+    assert receipt["claim_id"] == claim_id
     assert receipt["round"] == 1
-    assert receipt["policy_sha256"] == doc_sha(POLICY)
-    assert receipt["notice_sha256"] == doc_sha(NOTICE_UNOCCUPIED)
-    assert receipt["panel_state"] == "READ"
-    assert receipt["grounds"][0]["outcome"] == "SUPPORTED"
-    assert receipt["literal"][0]["clause_ref_literal"] is True
-    assert receipt["definition_hash"] == harness.contract.definition_hash(
-        clause_set_id, 1)
+    assert receipt["panel_state"] == "ASSESSED"
+    assert receipt["policy_status"] == "EVIDENCE_REACHABLE"
+    assert receipt["missing_required_kinds"] == []
+    assert receipt["findings"]["conditions"][0]["finding"] == "MET"
+    assert receipt["policy_hash"] == harness.contract.get_policy_hash(claim_id)
+    assert receipt["evidence_digest"] == harness.contract.get_submission(
+        submission_id)["evidence_digest"]
 
 
 def test_a_verdict_goes_stale_after_its_window(harness):
-    clause_set_id = harness.register(window=2)
-    harness.mock_doc(POLICY)
-    review_id, _ = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_42, supported="YES"))
-    assert harness.contract.freshness(review_id, "2026-10-19") == "RELIABLE"
-    assert harness.contract.freshness(review_id, "2026-10-20") == "STALE"
-    assert harness.contract.is_fresh(review_id, "2026-10-20") is False
-    assert harness.contract.is_consumable(review_id, "2026-10-20") is False
-    assert harness.contract.is_denial_supported(review_id,
-                                                "2026-10-20") is False
-    # A date before the reading, or a date that is not a date, is unknown -
-    # never fresh.
-    assert harness.contract.freshness(review_id, "2026-10-01") == "UNKNOWN"
-    assert harness.contract.freshness(review_id, "not-a-date") == "UNKNOWN"
-    assert harness.contract.freshness(review_id, "2026-13-01") == "UNKNOWN"
+    definition = json.loads(json.dumps(
+        __import__("conftest").PROPERTY_DEFINITION))
+    definition["review_window_days"] = 2
+    policy_id = harness.register(definition)
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
+    harness.resolve(submission_id)
+    assert harness.contract.freshness(submission_id,
+                                      "2026-10-19") == "RELIABLE"
+    assert harness.contract.freshness(submission_id, "2026-10-20") == "STALE"
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  "2026-10-20") is False
+    assert harness.contract.freshness(submission_id,
+                                      "2026-10-01") == "UNKNOWN"
+    assert harness.contract.freshness(submission_id, "not-a-date") == "UNKNOWN"
+    assert policy_id == "pol-1"
 
 
-def test_revoking_the_version_blocks_its_reviews(ready):
-    harness, clause_set_id = ready
-    review_id, _ = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_42, supported="YES"))
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is True
+def test_revoking_the_version_blocks_its_claims(ready):
+    harness, policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
+    harness.resolve(submission_id)
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is True
     harness.vm.sender = harness.insurer
-    harness.contract.revoke_clause_version(clause_set_id, 1)
-    assert harness.contract.freshness(review_id, TODAY_DATE) == "BLOCKED"
-    assert harness.contract.is_consumable(review_id, TODAY_DATE) is False
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is False
-    # The verdict itself is not rewritten: the record stays readable.
-    assert harness.contract.review_verdict(review_id) == "DENIAL_SUPPORTED"
-    assert harness.contract.clause_set_record(
-        clause_set_id, 1)["DENIAL_SUPPORTED"] == 1
+    harness.contract.revoke_policy_version(policy_id, 1)
+    assert harness.contract.freshness(submission_id, TODAY_DATE) == "BLOCKED"
+    assert harness.contract.is_consumable(submission_id, TODAY_DATE) is False
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is False
+    # The verdict is not rewritten: the record stays readable.
+    assert harness.contract.get_submission(
+        submission_id)["verdict"] == "COVERAGE_SUPPORTED"
+    assert harness.contract.policy_record(
+        policy_id, 1)["COVERAGE_SUPPORTED"] == 1
+    assert claim_id == "clm-1"
 
 
-def test_a_reissued_notice_gets_its_own_review_with_lineage(ready):
-    harness, clause_set_id = ready
-    first, _ = _resolve_one(
-        harness, clause_set_id, NOTICE_JEWELLERY, ["Clause 5.4"],
-        JEWELLERY_GROUND,
-        dict(clause_quote=CLAUSE_54, notice_quote=NOTICE_54, supported="YES",
-             exceeded=True))
-    harness.mock_doc(NOTICE_UNOCCUPIED)
-    harness.vm.sender = harness.claimant
-    second = harness.contract.supersede_review(
-        first, url_for(NOTICE_UNOCCUPIED), doc_sha(NOTICE_UNOCCUPIED),
-        ["Clause 4.2"],
-        ["the insured address was left unoccupied for more than sixty days"])
-    assert harness.contract.get_review(first)["superseded_by"] == second
-    new_review = harness.contract.get_review(second)
-    assert new_review["supersedes"] == first
-    assert new_review["status"] == "OPEN"
-    assert new_review["claim_reference"] == "SYN-TEST"
-    harness.clear()
-    harness.mock_doc(POLICY)
-    harness.mock_doc(NOTICE_UNOCCUPIED)
-    harness.mock_panel(harness.panel_json([harness.row(
-        clause_quote=CLAUSE_42, notice_quote=NOTICE_42, supported="YES")]))
-    assert harness.resolve(second) == "DENIAL_SUPPORTED"
-    # The superseded review keeps its own verdict and its own place in the
-    # clause record; nothing is rewritten by the replacement.
-    assert harness.contract.review_verdict(first) == "DENIAL_OVERBROAD"
-    summary = harness.contract.clause_set_record(clause_set_id, 1)
-    assert summary["DENIAL_OVERBROAD"] == 1
-    assert summary["DENIAL_SUPPORTED"] == 1
-
-
-def test_only_a_resolved_review_can_be_superseded_and_only_once(ready):
-    harness, clause_set_id = ready
-    open_review = harness.open_review(clause_set_id)
-    harness.vm.sender = harness.claimant
-    with harness.vm.expect_revert("only a resolved review"):
-        harness.contract.supersede_review(
-            open_review, url_for(NOTICE_LATE), doc_sha(NOTICE_LATE),
-            ["Clause 3.3"], LATE_GROUND)
-    harness.vm.sender = harness.claimant
-    harness.contract.withdraw_review(open_review)
-    first, _ = _resolve_one(
-        harness, clause_set_id, NOTICE_UNOCCUPIED, ["Clause 4.2"], None,
-        dict(clause_quote=CLAUSE_42, notice_quote=NOTICE_42, supported="YES"))
-    harness.vm.sender = harness.claimant
-    second = harness.contract.supersede_review(
-        first, url_for(NOTICE_LATE), doc_sha(NOTICE_LATE), ["Clause 3.3"],
-        LATE_GROUND)
-    harness.vm.sender = harness.claimant
-    with harness.vm.expect_revert("already superseded by " + second):
-        harness.contract.supersede_review(
-            first, url_for(NOTICE_FLOOD), doc_sha(NOTICE_FLOOD),
-            ["Clause 9.4"], FLOOD_GROUND)
+def test_claim_outcome_is_one_read_for_a_consumer(ready):
+    harness, _policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
+    harness.resolve(submission_id)
+    outcome = harness.contract.claim_outcome(submission_id, TODAY_DATE)
+    assert outcome["verdict"] == "COVERAGE_SUPPORTED"
+    assert outcome["coverage_supported"] is True
+    assert outcome["consumable"] is True
+    assert outcome["freshness"] == "RELIABLE"
+    assert outcome["conditions_met"] == 3
+    assert outcome["conditions_not_met"] == 0
+    assert outcome["conditions_unclear"] == 0
+    assert outcome["is_current_version"] is True
+    assert outcome["evidence_status"] == "EVIDENCE_SUFFICIENT"
+    assert outcome["policy_hash"] == harness.contract.get_policy_hash(claim_id)

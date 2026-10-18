@@ -1,0 +1,21 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+Synthetic holding statement written to exercise an adjudication contract.
+The holding, the insured and the details are invented.
+
+HOLDING STATEMENT - SYN-3012
+Insured holding: Plot 7, synthetic groundnut scheme
+Named in the schedule as: Plot 7, synthetic groundnut scheme
+Reference station named in the schedule: SYN-REF-07
+Insured window named in the schedule: 1 June 2026 to 30 September 2026
+
+Statement
+This claim is made for the holding named above, under the parametric
+drought cover for the 2026 growing window. The holding is the one named in
+the schedule and has not changed hands during the window.
+
+The claim relies on the published rainfall record for station SYN-REF-07
+for the window 1 June 2026 to 30 September 2026, as issued by the
+publishing body.
+
+No part of this claim is made for loss caused by pests, disease, fire,
+theft or civil disturbance.

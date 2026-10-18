@@ -18,35 +18,46 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 CONTRACTS = ROOT / "contracts"
 FIXTURES = ROOT / "fixtures"
 
-WRITES = ["register_clause_set", "publish_clause_version",
-          "revoke_clause_version", "open_review", "supersede_review",
-          "resolve_review", "retry_review", "withdraw_review"]
+WRITES = ["register_policy", "publish_policy_version",
+          "revoke_policy_version", "open_claim_challenge",
+          "cancel_claim_challenge", "submit_claim", "resolve_submission",
+          "retry_submission", "cancel_submission"]
 
-VIEWS = ["get_config", "get_clause_set", "clause_set_head", "definition_hash",
-         "get_review", "get_grounds", "get_receipt", "review_verdict",
-         "review_status", "freshness", "is_fresh", "is_consumable",
-         "is_denial_supported", "is_denial_unsupported", "review_outcome",
-         "clause_record", "clause_set_record", "list_reviews",
-         "notice_under_review", "get_stats"]
+VIEWS = ["get_config", "get_policy", "get_claim", "get_claim_status",
+         "get_policy_hash", "get_policy_version", "get_submission",
+         "get_verdict", "get_evidence_status", "get_findings", "get_receipt",
+         "is_coverage_supported", "freshness", "is_fresh", "is_consumable",
+         "claim_outcome", "policy_record", "list_submissions",
+         "evidence_first_seen", "get_stats"]
 
-VERDICTS = ["DENIAL_SUPPORTED", "DENIAL_UNSUPPORTED", "DENIAL_OVERBROAD",
-            "CLAUSE_MISCITED", "GROUNDS_MISSTATED", "INCONCLUSIVE",
-            "RECORD_UNAVAILABLE", "WITHDRAWN", "PENDING"]
+VERDICTS = ["COVERAGE_SUPPORTED", "COVERAGE_NOT_ESTABLISHED",
+            "EXCLUSION_APPLIES", "FRAUD_INDICATORS_FOUND", "INCONCLUSIVE",
+            "EVIDENCE_UNAVAILABLE", "CANCELLED", "PENDING"]
 
-GROUND_OUTCOMES = ["SUPPORTED", "UNSUPPORTED", "OVERBROAD", "CLAUSE_ABSENT",
-                   "NOT_IN_NOTICE", "UNDECIDED"]
+FINDINGS = ["MET", "NOT_MET", "UNCLEAR", "NOT_ASSESSED", "EVIDENCED",
+            "NOT_EVIDENCED", "INDICATORS_FOUND", "NO_INDICATORS",
+            "NOT_ASKED"]
 
-DOC_STATUSES = ["EXAMINED", "UNAVAILABLE", "HASH_MISMATCH", "TOO_LARGE",
-                "UNREADABLE"]
+DOC_STATUSES = ["EVIDENCE_REACHABLE", "EVIDENCE_UNAVAILABLE",
+                "EVIDENCE_INSUFFICIENT", "EVIDENCE_CONTRADICTORY",
+                "EVIDENCE_SUFFICIENT"]
+
+ROW_REASONS = ["FETCH_FAILED", "HASH_MISMATCH", "TOO_LARGE", "UNREADABLE"]
+
+TRIGGER_STATES = ["NOT_DECLARED", "MET", "NOT_MET", "UNREADABLE"]
 
 FORBIDDEN_IMPORTS = ["import time", "import random", "import requests",
                      "import urllib", "import socket", "import subprocess",
                      "import os", "from os ", "from time ", "from random ",
                      "import datetime", "from datetime "]
 
-FIXTURE_FILES = ["policy-household-v1.txt", "notice-unoccupied.txt",
-                 "notice-late-notification.txt", "notice-jewellery-limit.txt",
-                 "notice-flood-clause.txt", "notice-unoccupied-directed.txt"]
+FIXTURE_FILES = ["policy-property-v1.txt", "policy-crop-parametric-v1.txt",
+                 "incident-report-storm.txt", "repair-invoice-storm.txt",
+                 "assessor-report-gradual.txt",
+                 "incident-report-no-forced-entry.txt",
+                 "incident-report-directed.txt",
+                 "rainfall-record-season.txt",
+                 "holding-statement-groundnut.txt"]
 
 SECRET_HINTS = ["private_key", "privatekey", "mnemonic", "seed phrase",
                 "BEGIN RSA", "gh_token", "github_token", "api_key"]
@@ -118,18 +129,30 @@ def main() -> int:
     for verdict in VERDICTS:
         checks.ok('"' + verdict + '"' in text,
                   "verdict " + verdict + " is defined")
-    for outcome in GROUND_OUTCOMES:
-        checks.ok('"' + outcome + '"' in text,
-                  "ground outcome " + outcome + " is defined")
+    for finding in FINDINGS:
+        checks.ok('"' + finding + '"' in text,
+                  "finding " + finding + " is defined")
     for status in DOC_STATUSES:
         checks.ok('"' + status + '"' in text,
-                  "document status " + status + " is defined")
+                  "evidence status " + status + " is defined")
+    for reason in ROW_REASONS:
+        checks.ok('"' + reason + '"' in text,
+                  "unavailability reason " + reason + " is defined")
+    for state in TRIGGER_STATES:
+        checks.ok('"' + state + '"' in text,
+                  "trigger state " + state + " is defined")
 
     # -- nondeterminism lives in one place ---------------------------------
     checks.ok(text.count("gl.vm.run_nondet_unsafe(") == 1,
               "exactly one consensus round in the contract")
     checks.ok(text.count("gl.nondet.web.get(") == 1,
               "documents are fetched in one helper")
+    checks.ok("def _trigger_state(" in text,
+              "a parametric trigger is compared in code, not by the model")
+    checks.ok("Do not decide whether it " in text,
+              "the panel is told not to decide the trigger")
+    checks.ok("Missing or incomplete evidence is never" in text,
+              "the panel is told that a gap is not an indicator of fraud")
     checks.ok(text.count("gl.nondet.exec_prompt(") == 1,
               "the panel is convened in one place")
     checks.ok("def validator_fn(leader_res)" in text,
@@ -144,34 +167,40 @@ def main() -> int:
     # -- the gate and the derivation ----------------------------------------
     for marker in ["def _parse_payload(", "def _first_difference(",
                    "def _quote_grounded(", "def _derive_verdict(",
-                   "def _ground_outcome(", "def _admit_url(",
-                   "def _exact_bool(", "def _directed_text_hits("]:
+                   "def _criteria(", "def _evidence_status(",
+                   "def _admit_url(", "def _exact_bool(",
+                   "def _apply_grounding(", "def _directed_text_hits("]:
         checks.ok(marker in text, marker.strip("def (") + " exists")
     derivation = text[text.index("def _derive_verdict("):]
     derivation = derivation[:derivation.index("# == storage")]
-    order = [derivation.index("VERDICT_UNAVAILABLE"),
-             derivation.index("VERDICT_MISSTATED"),
-             derivation.index("VERDICT_MISCITED"),
-             derivation.index("VERDICT_UNSUPPORTED"),
-             derivation.index("VERDICT_OVERBROAD"),
-             derivation.index("VERDICT_SUPPORTED")]
+    order = [derivation.index("VERDICT_EVIDENCE_UNAVAILABLE"),
+             derivation.index("VERDICT_FRAUD_INDICATORS_FOUND"),
+             derivation.index("VERDICT_EXCLUSION_APPLIES"),
+             derivation.index("VERDICT_COVERAGE_NOT_ESTABLISHED"),
+             derivation.index("VERDICT_COVERAGE_SUPPORTED")]
     checks.ok(order == sorted(order),
               "verdict precedence runs from unavailable to supported")
     checks.ok("directed_text_hits" in derivation,
-              "a notice that addresses its reader cannot be upheld")
+              "evidence that addresses its reader cannot win coverage")
+    checks.ok("FRAUD_INDICATORS_FOUND" in derivation,
+              "fraud is only ever a declared, quoted finding")
     checks.ok("isinstance(value, bool)" in text,
               "booleans are checked for exactly, not truthily")
 
     # -- bounds -------------------------------------------------------------
-    for name, lower, upper in [("MAX_GROUNDS", 1, 20), ("MAX_ROUNDS", 1, 10),
-                               ("MAX_REVIEWS_PER_VERSION", 1, 10000),
+    for name, lower, upper in [("MAX_CONDITIONS", 1, 20),
+                               ("MAX_EXCLUSIONS", 1, 20),
+                               ("MAX_EVIDENCE", 1, 20),
+                               ("MAX_REQUIRED_KINDS", 1, 20),
+                               ("MAX_ROUNDS", 1, 10),
+                               ("MAX_SUBMISSIONS_PER_CHALLENGE", 1, 10000),
                                ("MAX_VERSIONS", 1, 1000),
                                ("URL_MAX", 50, 2048),
                                ("QUOTE_MAX", 40, 2000),
                                ("QUOTE_MIN", 4, 100),
                                ("FETCH_BYTES_CAP", 1000, 5000000),
-                               ("CLAUSE_WINDOW_CHARS", 500, 100000),
-                               ("NOTICE_CHARS", 500, 100000)]:
+                               ("POLICY_CHARS", 500, 100000),
+                               ("DOCUMENT_CHARS", 500, 100000)]:
         found = re.search("^" + name + r" = (\d+)$", text, re.MULTILINE)
         checks.ok(found is not None and lower <= int(found.group(1)) <= upper,
                   name + " is set and within a sane range")

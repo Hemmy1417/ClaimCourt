@@ -1,0 +1,23 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+Synthetic invoice written to exercise an adjudication contract. The trader,
+the figures and the work are invented.
+
+INVOICE 4471
+Synthetic Restoration Works
+Issued: 24 March 2026
+For: the insured at Unit 4, synthetic trading estate
+Our reference: storm damage of 3 March 2026
+
+Work carried out following storm damage and water ingress:
+
+  Strip and replace damaged stockroom ceiling panels      1,240
+  Replace damaged racking, four bays                      2,180
+  Dry out and clean stockroom floor and walls               860
+  Dispose of water damaged stock at floor level             410
+
+  Total                                                   4,690
+
+The damage we attended was consistent with water entering through the roof
+covering during the storm of 2 to 3 March 2026. The materials replaced were
+sound apart from the water damage; we found no rot, no corrosion and no
+sign of long standing deterioration.

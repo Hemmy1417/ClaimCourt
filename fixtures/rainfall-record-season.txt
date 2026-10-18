@@ -1,0 +1,25 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+Synthetic rainfall record written to exercise an adjudication contract. The
+station, the figures and the publishing body are invented. These are not
+real meteorological observations and must not be used as such.
+
+SYNTHETIC REFERENCE STATION - PUBLISHED RAINFALL RECORD
+Publishing body: Synthetic Meteorological Service
+Station: SYN-REF-07, synthetic reference station
+Issued: 5 October 2026
+
+Cumulative rainfall by window
+
+  Window 1 June 2026 to 30 September 2026
+  Cumulative rainfall recorded: 182 millimetres
+
+  Window 1 June 2025 to 30 September 2025
+  Cumulative rainfall recorded: 486 millimetres
+
+  Window 1 June 2024 to 30 September 2024
+  Cumulative rainfall recorded: 521 millimetres
+
+Notes
+Figures are cumulative totals for the window stated, in millimetres, from
+the station's own gauge. A figure for a window is published once the window
+has closed and is not revised afterwards.

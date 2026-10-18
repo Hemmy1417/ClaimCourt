@@ -1,0 +1,27 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+Synthetic incident report written to exercise an adjudication contract. The
+parties, the premises, the dates and the loss are invented.
+
+LOSS REPORT - SYN-2063
+Insured premises: Unit 12, synthetic trading estate
+Reported to the insurer: 2 August 2026
+Date the insured became aware of the loss: 29 July 2026
+
+What happened
+The insured attended the unit on the morning of 29 July 2026 and found
+stock missing from the front racking: eleven boxed units, together with a
+laptop from the office desk.
+
+Means of entry
+The side door was found closed but unlocked. The insured's own statement is
+that the door was not locked when the premises were left on 28 July, as the
+last person out was expecting a colleague to return. There is no damage to
+the door, the frame, the lock or the hinges, and no damage to any window.
+The attending officer recorded no sign of forced entry.
+
+Nothing in the unit was broken open. The racking and the office furniture
+are undamaged.
+
+Notification
+The insured became aware of the loss on 29 July 2026 and reported it to the
+insurer on 2 August 2026, four days later.

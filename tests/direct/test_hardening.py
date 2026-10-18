@@ -1,268 +1,356 @@
-"""Hostile panel output and hostile documents, through the real pipeline.
+"""Hostile panel output, through the real pipeline.
 
 Every case asserts two things: the verdict fails closed, and the stored
 state stays honest - no finding, no counter, no consumability.
 """
 
+import json
+
 import pytest
 
-from conftest import (NOTICE_DIRECTED, NOTICE_UNOCCUPIED, POLICY, TODAY_DATE,
-                      quote_from)
+from conftest import (CROP_DEFINITION, CROP_EVIDENCE, CROP_INCIDENT,
+                      FRAUD_DEFINITION, HOLDING_STATEMENT, POLICY_CROP,
+                      POLICY_PROPERTY, RAINFALL_RECORD, STORM_INVOICE,
+                      STORM_REPORT, TODAY_DATE, quote_from)
 
 
-CLAUSE_42 = quote_from(POLICY, "The insurer does not cover loss or damage")
-NOTICE_42 = quote_from(NOTICE_UNOCCUPIED, "no person authorised by you slept")
-
-GOOD_ROW = ('{"index":0,"clause_located":true,"clause_quote":"%s",'
-            '"ground_stated_in_notice":true,"notice_quote":"%s",'
-            '"supported":"YES","scope_exceeded":false,"basis":"ok"}'
-            % (CLAUSE_42.replace('"', ""), NOTICE_42.replace('"', "")))
+STORM_EVENT = quote_from(STORM_REPORT, "On the night of 2 to 3 March 2026 a")
+STORM_NOTICE = quote_from(STORM_REPORT, "The insured became aware of the loss")
+INVOICE_COST = quote_from(STORM_INVOICE, "Strip and replace damaged stockroom")
+RAINFALL = quote_from(RAINFALL_RECORD, "Cumulative rainfall recorded: 182")
+HOLDING = quote_from(HOLDING_STATEMENT, "This claim is made for the holding")
 
 
-def _review(harness, clause_set_id, notice=NOTICE_UNOCCUPIED):
-    harness.mock_doc(notice)
-    return harness.open_review(clause_set_id, notice=notice)
+def _good(harness):
+    return harness.panel(
+        [("C1", "MET", STORM_EVENT, "E1"),
+         ("C2", "MET", STORM_NOTICE, "E1"),
+         ("C3", "MET", INVOICE_COST, "E2")],
+        [("X1", "NOT_EVIDENCED", "", ""),
+         ("X2", "NOT_EVIDENCED", "", "")])
 
 
-def _resolve_with(harness, clause_set_id, raw, notice=NOTICE_UNOCCUPIED):
-    review_id = _review(harness, clause_set_id, notice)
+def _resolve_with(ready, raw):
+    harness, _policy_id, claim_id = ready
+    submission_id = harness.submit(claim_id)
     harness.mock_panel(raw)
-    return review_id, harness.resolve(review_id)
+    return submission_id, harness.resolve(submission_id)
 
 
-def _assert_unread(harness, review_id):
-    """An unusable answer leaves a review readable, retryable and empty of
-    findings."""
-    review = harness.contract.get_review(review_id)
-    assert review["verdict"] == "INCONCLUSIVE"
-    assert review["status"] == "RETRYABLE"
-    assert review["panel_state"] == "INVALID"
-    assert review["policy_status"] == "EXAMINED"
-    assert review["notice_status"] == "EXAMINED"
-    for ground in harness.contract.get_grounds(review_id):
-        assert ground["outcome"] == "UNDECIDED"
-        assert ground["clause_quote"] == ""
-        assert ground["notice_quote"] == ""
-    assert harness.contract.is_consumable(review_id, TODAY_DATE) is False
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is False
-    assert harness.contract.clause_record(
-        harness.contract.get_review(review_id)["clause_set_id"], 1,
-        "Clause 4.2")["total"] == 0
+def _assert_unread(harness, submission_id, policy_id="pol-1"):
+    record = harness.contract.get_submission(submission_id)
+    assert record["verdict"] == "INCONCLUSIVE"
+    assert record["status"] == "RETRYABLE"
+    assert record["panel_state"] == "INVALID"
+    assert record["policy_status"] == "EVIDENCE_REACHABLE"
+    assert record["evidence_status"] == "EVIDENCE_INSUFFICIENT"
+    findings = harness.contract.get_findings(submission_id)
+    for row in findings["conditions"]:
+        assert row["finding"] == "NOT_ASSESSED"
+        assert row["quote"] == ""
+    for row in findings["exclusions"]:
+        assert row["finding"] == "NOT_ASSESSED"
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is False
+    assert harness.contract.policy_record(policy_id, 1)["total"] == 0
 
 
 @pytest.mark.parametrize("raw,label", [
     ("", "empty answer"),
     ("   ", "blank answer"),
-    ("the denial looks fine to me", "prose with no json"),
+    ("the claim looks fine to me", "prose with no json"),
     ("{", "truncated json"),
-    ('{"grounds":', "cut off mid key"),
-    ('["grounds"]', "a list where an object is required"),
+    ('{"conditions":', "cut off mid key"),
+    ('["conditions"]', "a list where an object is required"),
     ('{"rows":[]}', "the wrong key"),
-    ('{"grounds":{}}', "an object where a list is required"),
-    ('{"grounds":[]}', "no rows for one ground"),
-    ('{"grounds":[%s,%s]}' % (GOOD_ROW, GOOD_ROW), "two rows for one ground"),
-    ('{"grounds":["supported"]}', "a string where a row is required"),
+    ('{"conditions":{}}', "an object where a list is required"),
+    ('{"conditions":[],"exclusions":[],"evidence":{}}', "no rows at all"),
 ])
 def test_an_unusable_panel_answer_fails_closed(ready, raw, label):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_with(harness, clause_set_id, raw)
+    harness, _policy_id, _claim_id = ready
+    submission_id, verdict = _resolve_with(ready, raw)
     assert verdict == "INCONCLUSIVE", label
-    _assert_unread(harness, review_id)
+    _assert_unread(harness, submission_id)
+
+
+def test_a_row_count_that_does_not_match_the_policy_fails_closed(ready):
+    harness, _policy_id, _claim_id = ready
+    short = harness.panel([("C1", "MET", STORM_EVENT, "E1")],
+                          [("X1", "NOT_EVIDENCED", "", "")])
+    submission_id, verdict = _resolve_with(ready, short)
+    assert verdict == "INCONCLUSIVE"
+    _assert_unread(harness, submission_id)
+
+
+def test_rows_out_of_order_fail_closed(ready):
+    harness, _policy_id, _claim_id = ready
+    swapped = harness.panel(
+        [("C2", "MET", STORM_NOTICE, "E1"),
+         ("C1", "MET", STORM_EVENT, "E1"),
+         ("C3", "MET", INVOICE_COST, "E2")],
+        [("X1", "NOT_EVIDENCED", "", ""), ("X2", "NOT_EVIDENCED", "", "")])
+    submission_id, verdict = _resolve_with(ready, swapped)
+    assert verdict == "INCONCLUSIVE"
+    _assert_unread(harness, submission_id)
 
 
 @pytest.mark.parametrize("mutation,label", [
-    ('"clause_located":1', "an integer where a boolean is required"),
-    ('"clause_located":"true"', "a truthy string where a boolean is required"),
-    ('"clause_located":null', "a null boolean"),
-    ('"ground_stated_in_notice":0', "a zero where a boolean is required"),
-    ('"scope_exceeded":1.0', "a float where a boolean is required"),
-    ('"supported":"MAYBE_SUPPORTED"', "an unknown verdict word"),
-    ('"supported":"PASS"', "a verdict word from another protocol"),
-    ('"supported":true', "a boolean where an enum is required"),
-    ('"index":true', "a boolean index"),
-    ('"index":"0"', "a string index"),
-    ('"index":1.0', "a float index"),
-    ('"index":-1', "a negative index"),
-    ('"index":99', "an index past the grounds"),
-    ('"basis":42', "a number where prose is required"),
-    ('"clause_quote":12', "a number where a quote is required"),
+    ('"finding": 1', "a number where a finding is required"),
+    ('"finding": true', "a boolean where a finding is required"),
+    ('"finding": "SUPPORTED"', "a finding word from another protocol"),
+    ('"finding": "NOT_ASSESSED"', "claiming not assessed on a read round"),
+    ('"finding": null', "a null finding"),
+    ('"quote": 42', "a number where a quote is required"),
+    ('"evidence_id": 7', "a number where a document id is required"),
+    ('"ref": "C9"', "a reference the policy does not have"),
 ])
-def test_a_wrongly_typed_field_fails_closed(ready, mutation, label):
-    harness, clause_set_id = ready
-    key = mutation.split(":")[0]
-    row = GOOD_ROW
-    start = row.index(key)
-    end = row.index(",", start) if row.index(key) != row.rindex('"basis"') \
-        else row.rindex("}")
-    broken = row[:start] + mutation + row[end:]
-    review_id, verdict = _resolve_with(harness, clause_set_id,
-                                       '{"grounds":[%s]}' % broken)
+def test_a_wrongly_typed_condition_row_fails_closed(ready, mutation, label):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    key, value = mutation.split(":", 1)
+    answer["conditions"][0][json.loads(key)] = json.loads(value)
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
     assert verdict == "INCONCLUSIVE", label
-    _assert_unread(harness, review_id)
+    _assert_unread(harness, submission_id)
 
 
-@pytest.mark.parametrize("missing", [
-    "clause_located", "clause_quote", "ground_stated_in_notice",
-    "notice_quote", "supported", "scope_exceeded", "basis", "index",
+@pytest.mark.parametrize("field,value", [
+    ("sufficient", 1),
+    ("sufficient", "true"),
+    ("sufficient", None),
+    ("contradiction", 0),
+    ("contradiction", "false"),
 ])
-def test_a_missing_field_fails_closed(ready, missing):
-    harness, clause_set_id = ready
-    row = GOOD_ROW
-    start = row.index('"' + missing + '"')
-    end = row.index(",", start) + 1 if missing != "basis" \
-        else len(row) - 1
-    if missing == "basis":
-        broken = row[:start - 1] + "}"
-    else:
-        broken = row[:start] + row[end:]
-    review_id, verdict = _resolve_with(harness, clause_set_id,
-                                       '{"grounds":[%s]}' % broken)
+def test_a_wrongly_typed_evidence_block_fails_closed(ready, field, value):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["evidence"][field] = value
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
     assert verdict == "INCONCLUSIVE"
-    _assert_unread(harness, review_id)
+    _assert_unread(harness, submission_id)
 
 
-def test_two_rows_claiming_the_same_ground_fail_closed(harness):
-    clause_set_id = harness.register()
-    harness.mock_doc(POLICY)
-    harness.mock_doc(NOTICE_UNOCCUPIED)
-    review_id = harness.open_review(
-        clause_set_id, clause_refs=["Clause 4.2", "Clause 3.3"],
-        grounds=["the premises were left unoccupied for sixty days",
-                 "the claim was notified later than thirty days"])
-    harness.mock_panel('{"grounds":[%s,%s]}' % (GOOD_ROW, GOOD_ROW))
-    assert harness.resolve(review_id) == "INCONCLUSIVE"
-    assert harness.contract.get_review(review_id)["panel_state"] == "INVALID"
+@pytest.mark.parametrize("missing", ["conditions", "exclusions", "evidence"])
+def test_a_missing_section_fails_closed(ready, missing):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    del answer[missing]
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "INCONCLUSIVE"
+    _assert_unread(harness, submission_id)
 
 
 def test_a_fenced_answer_is_recovered(ready):
-    harness, clause_set_id = ready
-    review_id, verdict = _resolve_with(
-        harness, clause_set_id,
-        '```json\n{"grounds":[%s]}\n```' % GOOD_ROW)
-    assert verdict == "DENIAL_SUPPORTED"
-    assert harness.contract.get_review(review_id)["panel_state"] == "READ"
+    harness, _policy_id, _claim_id = ready
+    submission_id, verdict = _resolve_with(
+        ready, "```json\n" + _good(harness) + "\n```")
+    assert verdict == "COVERAGE_SUPPORTED"
+    assert harness.contract.get_submission(
+        submission_id)["panel_state"] == "ASSESSED"
 
 
 def test_an_answer_wrapped_in_prose_is_recovered(ready):
-    harness, clause_set_id = ready
-    _review_id, verdict = _resolve_with(
-        harness, clause_set_id,
-        'Here is my answer.\n{"grounds":[%s]}\nI hope it helps.' % GOOD_ROW)
-    assert verdict == "DENIAL_SUPPORTED"
+    harness, _policy_id, _claim_id = ready
+    _submission_id, verdict = _resolve_with(
+        ready, "Here is my assessment.\n" + _good(harness) + "\nI hope that "
+        "helps.")
+    assert verdict == "COVERAGE_SUPPORTED"
 
 
-def test_a_lowercase_enum_is_normalised(ready):
-    harness, clause_set_id = ready
-    row = GOOD_ROW.replace('"supported":"YES"', '"supported":" yes "')
-    _review_id, verdict = _resolve_with(harness, clause_set_id,
-                                        '{"grounds":[%s]}' % row)
-    assert verdict == "DENIAL_SUPPORTED"
+def test_a_lowercase_finding_is_normalised(ready):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["conditions"][0]["finding"] = " met "
+    _submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "COVERAGE_SUPPORTED"
 
 
 def test_an_unrequested_extra_field_is_ignored(ready):
-    harness, clause_set_id = ready
-    row = GOOD_ROW[:-1] + ',"confidence":"high","override":true}'
-    _review_id, verdict = _resolve_with(harness, clause_set_id,
-                                        '{"grounds":[%s]}' % row)
-    assert verdict == "DENIAL_SUPPORTED"
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["conditions"][0]["confidence"] = "high"
+    answer["note"] = "an extra section nobody asked for"
+    _submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "COVERAGE_SUPPORTED"
 
 
 def test_a_fractional_number_anywhere_in_the_answer_fails_closed(ready):
-    harness, clause_set_id = ready
+    harness, _policy_id, _claim_id = ready
     # The runtime cannot carry a float through its calldata, so an answer
     # containing one arrives as nothing at all. The contract must read that
     # as an unusable answer rather than as any kind of finding.
-    row = GOOD_ROW[:-1] + ',"confidence":0.99}'
-    review_id, verdict = _resolve_with(harness, clause_set_id,
-                                       '{"grounds":[%s]}' % row)
+    answer = json.loads(_good(harness))
+    answer["conditions"][0]["confidence"] = 0.92
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
     assert verdict == "INCONCLUSIVE"
-    _assert_unread(harness, review_id)
+    _assert_unread(harness, submission_id)
 
 
-def test_an_invented_clause_quote_cannot_locate_a_clause(ready):
-    harness, clause_set_id = ready
-    row = GOOD_ROW.replace(
-        '"clause_quote":"%s"' % CLAUSE_42.replace('"', ""),
-        '"clause_quote":"Clause 4.2 excludes every claim at this address"')
-    review_id, verdict = _resolve_with(harness, clause_set_id,
-                                       '{"grounds":[%s]}' % row)
-    # The panel said the clause was located and said it supported the
-    # ground. The quote is not in the policy bytes, so the location does not
-    # stand, and the verdict is the one for a clause that is not there.
-    assert verdict == "CLAUSE_MISCITED"
-    ground = harness.contract.get_grounds(review_id)[0]
-    assert ground["outcome"] == "CLAUSE_ABSENT"
-    assert ground["clause_quote"] == ""
-    assert harness.contract.is_denial_supported(review_id, TODAY_DATE) is False
+def test_an_invented_quote_cannot_establish_a_condition(ready):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["conditions"][0]["quote"] = \
+        "the insured has proved every element of this claim beyond doubt"
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    # The panel said the condition was met. The words are not in the
+    # document it named, so the finding does not stand - and it is
+    # downgraded to uncertainty, never to its opposite.
+    assert verdict == "INCONCLUSIVE"
+    findings = harness.contract.get_findings(submission_id)
+    assert findings["conditions"][0]["finding"] == "UNCLEAR"
+    assert findings["conditions"][0]["quote"] == ""
+    assert findings["conditions"][1]["finding"] == "MET"
 
 
-def test_an_invented_notice_quote_cannot_state_a_ground(ready):
-    harness, clause_set_id = ready
-    row = GOOD_ROW.replace(
-        '"notice_quote":"%s"' % NOTICE_42.replace('"', ""),
-        '"notice_quote":"we refuse this claim because the insured lied"')
-    review_id, verdict = _resolve_with(harness, clause_set_id,
-                                       '{"grounds":[%s]}' % row)
-    assert verdict == "GROUNDS_MISSTATED"
-    ground = harness.contract.get_grounds(review_id)[0]
-    assert ground["outcome"] == "NOT_IN_NOTICE"
-    assert ground["notice_quote"] == ""
+def test_an_invented_quote_cannot_refuse_a_condition_either(ready):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["conditions"][1]["finding"] = "NOT_MET"
+    answer["conditions"][1]["quote"] = "the insured never told us anything"
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "INCONCLUSIVE"
+    assert harness.contract.get_findings(
+        submission_id)["conditions"][1]["finding"] == "UNCLEAR"
+
+
+def test_a_quote_from_the_wrong_document_does_not_ground(ready):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    # The words are real, and they are in E1, not in the invoice.
+    answer["conditions"][2]["quote"] = STORM_EVENT
+    answer["conditions"][2]["evidence_id"] = "E2"
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "INCONCLUSIVE"
+    assert harness.contract.get_findings(
+        submission_id)["conditions"][2]["finding"] == "UNCLEAR"
+
+
+def test_an_ungrounded_exclusion_does_not_decide_the_claim(ready):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["exclusions"][0]["finding"] = "EVIDENCED"
+    answer["exclusions"][0]["quote"] = "the damage was obviously old"
+    answer["exclusions"][0]["evidence_id"] = "E1"
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    # An exclusion that cannot be quoted is not an exclusion that applies.
+    assert verdict == "INCONCLUSIVE"
+    assert harness.contract.get_findings(
+        submission_id)["exclusions"][0]["finding"] == "UNCLEAR"
+    assert harness.contract.get_verdict(
+        submission_id)["exclusion_applies"] is False
+
+
+def test_an_ungrounded_contradiction_is_dropped(ready):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["evidence"]["contradiction"] = True
+    answer["evidence"]["quote"] = "the two reports cannot both be right"
+    answer["evidence"]["evidence_id"] = "E1"
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "COVERAGE_SUPPORTED"
+    assert harness.contract.get_evidence_status(
+        submission_id) == "EVIDENCE_SUFFICIENT"
 
 
 def test_a_quote_too_short_to_mean_anything_does_not_ground(ready):
-    harness, clause_set_id = ready
-    row = GOOD_ROW.replace(
-        '"clause_quote":"%s"' % CLAUSE_42.replace('"', ""),
-        '"clause_quote":"the"')
-    _review_id, verdict = _resolve_with(harness, clause_set_id,
-                                        '{"grounds":[%s]}' % row)
-    assert verdict == "CLAUSE_MISCITED"
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["conditions"][0]["quote"] = "storm"
+    _submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "INCONCLUSIVE"
 
 
 def test_whitespace_and_case_do_not_break_grounding(ready):
-    harness, clause_set_id = ready
-    noisy = "  THE INSURER   does not COVER loss or damage  "
-    row = GOOD_ROW.replace(
-        '"clause_quote":"%s"' % CLAUSE_42.replace('"', ""),
-        '"clause_quote":"%s"' % noisy)
-    review_id, verdict = _resolve_with(harness, clause_set_id,
-                                       '{"grounds":[%s]}' % row)
-    assert verdict == "DENIAL_SUPPORTED"
-    assert harness.contract.get_grounds(review_id)[0]["clause_quote"] \
-        == "THE INSURER does not COVER loss or damage"
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["conditions"][0]["quote"] = \
+        "  ON THE NIGHT of 2 to 3   March 2026 a storm passed  "
+    _submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "COVERAGE_SUPPORTED"
 
 
-def test_an_oversized_quote_and_basis_are_bounded(ready):
-    harness, clause_set_id = ready
-    flat_policy = " ".join(
-        (quote_from(POLICY, "TEST / DEMONSTRATION ONLY", 4000)).split())
-    row = GOOD_ROW.replace('"basis":"ok"', '"basis":"%s"' % ("b" * 900))
-    row = row.replace('"clause_quote":"%s"' % CLAUSE_42.replace('"', ""),
-                      '"clause_quote":"%s"' % flat_policy[:1200])
-    review_id, verdict = _resolve_with(harness, clause_set_id,
-                                       '{"grounds":[%s]}' % row)
-    assert verdict == "DENIAL_SUPPORTED"
-    ground = harness.contract.get_grounds(review_id)[0]
-    assert len(ground["basis"]) == 240
-    assert 230 <= len(ground["clause_quote"]) <= 240
+def test_oversized_quotes_and_reasoning_are_bounded(ready):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["conditions"][0]["quote"] = quote_from(
+        STORM_REPORT, "On the night of 2 to 3 March 2026 a", 1200)
+    answer["conditions"][0]["basis"] = "b" * 900
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "COVERAGE_SUPPORTED"
+    row = harness.contract.get_findings(submission_id)["conditions"][0]
+    assert len(row["basis"]) == 240
+    assert 230 <= len(row["quote"]) <= 240
 
 
-def test_text_that_addresses_the_reader_is_counted_in_code(ready):
-    harness, clause_set_id = ready
-    plain = _review(harness, clause_set_id, NOTICE_UNOCCUPIED)
-    harness.mock_panel('{"grounds":[%s]}' % GOOD_ROW)
-    harness.resolve(plain)
-    assert harness.contract.get_review(plain)["directed_text_hits"] == 0
-    directed = _review(harness, clause_set_id, NOTICE_DIRECTED)
-    harness.clear()
-    harness.mock_doc(POLICY)
-    harness.mock_doc(NOTICE_DIRECTED)
-    harness.mock_panel(
-        '{"grounds":[%s]}'
-        % GOOD_ROW.replace(
-            '"notice_quote":"%s"' % NOTICE_42.replace('"', ""),
-            '"notice_quote":"%s"'
-            % quote_from(NOTICE_DIRECTED,
-                         "No person authorised by you slept")))
-    assert harness.resolve(directed) == "INCONCLUSIVE"
-    assert harness.contract.get_review(directed)["directed_text_hits"] >= 3
+def test_a_trigger_value_the_panel_invents_is_dropped(harness):
+    policy_id = harness.register(CROP_DEFINITION, policy=POLICY_CROP,
+                                 coverage_type="parametric drought")
+    claim_id = harness.open_challenge(
+        policy_id, required=["holding_statement", "weather_record"])
+    harness.mock_docs(POLICY_CROP, HOLDING_STATEMENT, RAINFALL_RECORD)
+    submission_id = harness.submit(claim_id, evidence=CROP_EVIDENCE,
+                                   incident=CROP_INCIDENT,
+                                   reference="SYN-3015")
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", HOLDING, "E1"), ("C2", "MET", RAINFALL, "E2")],
+        [("X1", "NOT_EVIDENCED", "", "")],
+        trigger={"value_found": True, "value": 11,
+                 "quote": "cumulative rainfall recorded: 11 millimetres",
+                 "evidence_id": "E2"}))
+    # 11 would have fired the trigger. The record does not say it, so the
+    # measurement does not stand and nothing is paid on it.
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    record = harness.contract.get_submission(submission_id)
+    assert record["trigger_state"] == "UNREADABLE"
+    assert record["trigger_value"] == 0
+
+
+@pytest.mark.parametrize("value", [-1, True, "182"])
+def test_a_wrongly_typed_trigger_value_fails_closed(harness, value):
+    policy_id = harness.register(CROP_DEFINITION, policy=POLICY_CROP,
+                                 coverage_type="parametric drought")
+    claim_id = harness.open_challenge(
+        policy_id, required=["holding_statement", "weather_record"])
+    harness.mock_docs(POLICY_CROP, HOLDING_STATEMENT, RAINFALL_RECORD)
+    submission_id = harness.submit(claim_id, evidence=CROP_EVIDENCE,
+                                   incident=CROP_INCIDENT,
+                                   reference="SYN-3016")
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", HOLDING, "E1"), ("C2", "MET", RAINFALL, "E2")],
+        [("X1", "NOT_EVIDENCED", "", "")],
+        trigger={"value_found": True, "value": value, "quote": RAINFALL,
+                 "evidence_id": "E2"}))
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    assert harness.contract.get_submission(
+        submission_id)["panel_state"] == "INVALID"
+    assert policy_id == "pol-1"
+
+
+@pytest.mark.parametrize("finding", ["GUILTY", "yes", "FOUND", True, 1])
+def test_an_unknown_fraud_finding_fails_closed(harness, finding):
+    policy_id = harness.register(FRAUD_DEFINITION)
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", STORM_EVENT, "E1"),
+         ("C2", "MET", STORM_NOTICE, "E1"),
+         ("C3", "MET", INVOICE_COST, "E2")],
+        [("X1", "NOT_EVIDENCED", "", ""), ("X2", "NOT_EVIDENCED", "", "")],
+        fraud={"finding": finding, "quote": "", "evidence_id": "",
+               "basis": ""}))
+    assert harness.resolve(submission_id) == "INCONCLUSIVE"
+    record = harness.contract.get_submission(submission_id)
+    assert record["panel_state"] == "INVALID"
+    assert record["fraud_finding"] == "UNCLEAR"
+    assert policy_id == "pol-1"
+
+
+def test_a_fraud_answer_where_none_was_asked_fails_closed(ready):
+    harness, _policy_id, _claim_id = ready
+    answer = json.loads(_good(harness))
+    answer["fraud"] = {"finding": "NO_INDICATORS", "quote": "",
+                       "evidence_id": "", "basis": "nothing seen"}
+    submission_id, verdict = _resolve_with(ready, json.dumps(answer))
+    assert verdict == "INCONCLUSIVE"
+    _assert_unread(harness, submission_id)

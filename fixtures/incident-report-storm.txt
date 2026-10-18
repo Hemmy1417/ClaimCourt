@@ -1,0 +1,29 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+Synthetic incident report written to exercise an adjudication contract. The
+parties, the premises, the dates and the loss are invented.
+
+LOSS REPORT - SYN-2041
+Insured premises: Unit 4, synthetic trading estate
+Reported to the insurer: 11 March 2026
+Date the insured became aware of the loss: 3 March 2026
+
+What happened
+On the night of 2 to 3 March 2026 a storm passed over the estate. Wind
+speeds recorded at the nearest station reached 97 km/h. A section of the
+roof covering over the stockroom lifted and water entered the unit
+overnight. The insured attended at 07:20 on 3 March and found standing
+water across the stockroom floor and damage to the racking and to stock
+stored at floor level.
+
+The damage claimed is the racking, the stock at floor level, and the
+stockroom ceiling panels. All of it was wet on the morning of 3 March and
+none of it was damaged before that night.
+
+Condition of the premises
+The unit was in use up to and including 2 March 2026 and staff were present
+on every working day in the preceding three months. The roof covering was
+inspected in September 2025 and no defect was recorded.
+
+Notification
+The insured became aware of the loss on 3 March 2026 and reported it to the
+insurer on 11 March 2026, eight days later.

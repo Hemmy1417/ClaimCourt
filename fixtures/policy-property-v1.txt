@@ -1,0 +1,42 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+This document is a synthetic policy wording written to exercise an
+adjudication contract. It is not a real insurance policy, it is not offered
+to anyone, and no part of it has been reviewed by an insurer, a regulator or
+a lawyer.
+
+SMALL COMMERCIAL PROPERTY WORDING
+Synthetic wording, edition 1
+
+Clause 1 Cover
+The insurer covers sudden and accidental physical loss of or damage to the
+insured contents at the insured premises caused by storm, flood, fire,
+impact, or theft following forcible and violent entry.
+
+Clause 2 Conditions of cover
+2.1 A covered event must have occurred at the insured premises during the
+period of insurance, and the damage claimed must have been caused by that
+event.
+
+2.2 The insured must report the loss to the insurer within thirty days of
+becoming aware of it, and must be able to show when they became aware.
+
+2.3 The insured must supply evidence of the cost of reinstatement: an
+invoice, an estimate, or an assessor's figure for the items claimed.
+
+2.4 Where the claim is for theft, there must be evidence of forcible and
+violent entry to the premises. Entry by a door or window left open or
+unlocked is not forcible and violent entry.
+
+Clause 3 Exclusions
+3.1 The insurer does not cover damage that is the result of gradual
+deterioration, wear and tear, rot, corrosion, or lack of maintenance over
+time, as distinct from damage caused by a sudden event listed in clause 1.
+
+3.2 The insurer does not cover loss or damage at premises that were left
+unoccupied for more than sixty consecutive days immediately before the
+loss, unless the insurer agreed to the unoccupancy in writing beforehand.
+
+Clause 4 Fraudulent claims
+A claim that the insured knows to be false in a material respect is not
+covered. A suspicion the insurer cannot evidence is not a known falsehood
+for this clause, and a gap in the papers is not evidence of dishonesty.

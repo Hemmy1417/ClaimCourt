@@ -1,0 +1,41 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+This document is a synthetic parametric wording written to exercise an
+adjudication contract. It is not a real insurance policy, it is not offered
+to anyone, and no part of it has been reviewed by an insurer, a regulator
+or a lawyer.
+
+PARAMETRIC DROUGHT COVER, SYNTHETIC GROUNDNUT SCHEME
+Synthetic wording, edition 1
+
+Clause 1 What this cover pays on
+This cover does not pay on a survey of the crop. It pays on a measurement.
+The insured event is a shortfall in recorded rainfall at the named station
+during the insured window, and nothing else about the season is relevant to
+whether the cover responds.
+
+Clause 2 The measurement
+2.1 The measure is cumulative rainfall in millimetres recorded at the
+synthetic reference station for the insured location.
+
+2.2 The insured window is the growing window stated in the schedule. Only
+rainfall recorded inside that window counts, whatever fell before or after.
+
+2.3 The trigger is met when cumulative rainfall for the window is at most
+the threshold stated in the schedule. Rainfall above the threshold does not
+trigger the cover, however poor the harvest was.
+
+Clause 3 Conditions of cover
+3.1 The insured holding must be the holding named in the schedule, and the
+claim must identify the station and window the schedule names.
+
+3.2 The claim must be supported by the published rainfall record for that
+station and window, as issued by the publishing body.
+
+Clause 4 Exclusions
+4.1 This cover does not pay for loss caused by pests, disease, fire, theft
+or civil disturbance, whatever the rainfall record shows.
+
+Clause 5 What this cover is not
+A payment under this wording is not a finding that any particular crop
+failed, and a trigger that is not met is not a finding that the season was
+good.
