@@ -146,22 +146,21 @@ MUTATIONS = [
     ("validator: everything the leader says is agreed with",
      'def _first_difference(own: dict, theirs: dict) -> str:',
      'def _first_difference(own: dict, theirs: dict) -> str:\n    return ""'),
-    ("validator: per-condition findings are not compared",
-     '    for index in range(len(mine["conditions"])):\n'
-     '        for field in ["ref", "finding"]:',
-     '    for index in range(len(mine["conditions"])):\n'
+    ('validator: the verdict is not compared',
+     '                   "directed_text_hits", "panel_state", "trigger_state",\n                   "verdict"]',
+     '                   "directed_text_hits", "panel_state", "trigger_state"]'),
+    ('validator: the document statuses are not compared',
+     '                   "evidence_digest", "policy_status", "policy_reason",\n                   "directed_text_hits",',
+     '                   "evidence_digest",\n                   "directed_text_hits",'),
+    ('validator: the document rows are not compared',
+     '        for field in ["evidence_id", "kind", "status", "reason",\n                      "byte_count"]:',
      '        for field in []:'),
-    ("validator: a leader failure is always believed",
-     'def _vote_on_leader_error(leader_res, reproduce) -> bool:',
-     'def _vote_on_leader_error(leader_res, reproduce) -> bool:\n'
-     '    return True'),
-    ("validator: the decision fields are trimmed",
-     'DECISION_FIELDS = ["schema", "submission_id", "claim_id", "round",\n'
-     '                   "policy_hash", "policy_version", "policy_sha256",\n'
-     '                   "evidence_digest", "policy_status", "policy_reason",\n'
-     '                   "directed_text_hits", "panel_state", '
-     '"trigger_state"]',
-     'DECISION_FIELDS = ["schema", "submission_id", "claim_id", "round"]'),
+    ('gate: the verdict need not follow from the findings',
+     '    if payload.get("verdict") != verdict:\n        return None',
+     '    pass'),
+    ('gate: the criteria need not follow from the findings',
+     '    if payload.get("criteria") != criteria:\n        return None',
+     '    pass'),
     ("lifecycle: a settled claim can be adjudicated again",
      '        if str(submission.status) != STATUS_PENDING:\n'
      '            self._reject("illegal transition from " '

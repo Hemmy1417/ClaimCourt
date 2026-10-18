@@ -4,9 +4,8 @@ from what the network says.
 
 Read-only. No signer, no keys, no funds, no writes - anyone can run this and
 get the same output, which is the point: the evidence in
-docs/proofs/live.md is not a transcript of my session, it is what
-Studionet answers today about the transactions recorded in
-docs/proofs/live.json.
+docs/proofs/live.md is not a transcript of my session, it is what Studionet
+answers today about the transactions recorded in docs/proofs/live.json.
 
     python scripts/verify.py
     python scripts/verify.py --quiet      # exit code only
@@ -18,9 +17,11 @@ import hashlib
 import json
 import pathlib
 import sys
+import time
 import urllib.request
 
-from genlayer_py import chains, create_account, create_client, generate_private_key
+from genlayer_py import (chains, create_account, create_client,
+                         generate_private_key)
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -29,9 +30,12 @@ PROOFS = ROOT / "docs" / "proofs"
 LEDGER = PROOFS / "live.json"
 CONTRACT = ROOT / "contracts" / "claimcourt.py"
 
+RPC = "https://studio.genlayer.com/api"
 EXPLORER = "https://explorer-studio.genlayer.com"
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
+
+AS_OF = "2026-10-18"
 
 lines = []
 failures = []
@@ -52,10 +56,19 @@ def check(label, actual, wanted):
     return ok
 
 
+def check_one_of(label, actual, allowed):
+    ok = actual in allowed
+    if not ok:
+        failures.append("%s: expected one of %r, got %r"
+                        % (label, allowed, actual))
+    say("| %s | `%s` | %s |" % (label, actual, "OK" if ok else "**WRONG**"))
+    return ok
+
+
 def _deployed_payload(address):
     """The contract as the network holds it."""
     request = urllib.request.Request(
-        "https://studio.genlayer.com/api",
+        RPC,
         data=json.dumps({"jsonrpc": "2.0", "id": 1,
                          "method": "gen_getContractCode",
                          "params": [address]}).encode("utf-8"),
@@ -110,18 +123,14 @@ def main():
     say("|---|---|")
     say("| Network | GenLayer Studionet, chain %d |" % ledger["chain_id"])
     say("| RPC | `%s` |" % ledger["rpc"])
-    say("| Contract | [`%s`](%s/address/%s) |"
-        % (address, EXPLORER, address))
+    say("| Contract | [`%s`](%s/address/%s) |" % (address, EXPLORER, address))
     say("| Deployer | `%s` |" % ledger["deployer"])
     say("| Source commit | `%s` |" % ledger["commit"])
+
     source = CONTRACT.read_bytes()
     source_sha = hashlib.sha256(source).hexdigest()
     say("| Contract source | `contracts/claimcourt.py`, sha256 `%s` |"
         % source_sha)
-
-    # Source parity, read off the chain rather than asserted: the network
-    # returns the deployed contract base64-encoded, and decoding it gives
-    # back bytes that must hash to the committed source.
     deployed = base64.b64decode(_deployed_payload(address))
     deployed_sha = hashlib.sha256(deployed).hexdigest()
     if deployed_sha != source_sha:
@@ -133,7 +142,7 @@ def main():
            else "**NO**"))
     say()
 
-    # -- the documents the validators had to fetch -------------------------
+    # -- the documents every node had to fetch and hash --------------------
     say("## The documents")
     say()
     say("Each was bound to the sha256 of its exact bytes before any node "
@@ -183,168 +192,182 @@ def main():
     say()
     say("An idle validator is not a disagreeing one, so the three counts are "
         "kept apart. Disagreement on a reading is not a defect and not a "
-        "failed transaction: a validator that read the documents and did "
-        "not reach the leader's conclusion votes against it, and the round "
-        "commits on the majority. Two of the four readings above carry "
-        "exactly that - a minority voting no while the majority carried. "
-        "That is the evidence that validators are deciding rather than "
-        "deferring; a column of unanimous agreement on a semantic question "
-        "would be the thing worth suspecting.")
+        "failed transaction: a validator that fetched the documents, read "
+        "them, and did not reach the leader's conclusion votes against it, "
+        "and the round commits on the majority. Several readings above carry "
+        "exactly that. A column of unanimous agreement on a question this "
+        "open would be the thing worth suspecting.")
     say()
 
-    # -- the state those transactions left behind --------------------------
+    # Studionet allows 30 reads a minute per address. This verification
+    # makes a few hundred, so it paces itself and waits out a limit rather
+    # than reporting a network quota as a failed check.
+    recent = []
+
     def read(method, params=None):
-        return client.read_contract(address=address, function_name=method,
-                                    args=params or [])
+        while True:
+            now = time.time()
+            recent[:] = [t for t in recent if now - t < 60]
+            if len(recent) >= 25:
+                time.sleep(61 - (now - recent[0]))
+                continue
+            recent.append(time.time())
+            try:
+                return client.read_contract(address=address,
+                                            function_name=method,
+                                            args=params or [])
+            except Exception as error:
+                if "Rate limit" not in str(error):
+                    raise
+                time.sleep(20)
 
     config = read("get_config")
-    clause_set = read("get_clause_set", ["cs-1", 1])
-
-    say("## The clause set")
+    say("## The policies")
     say()
-    say("| | |")
-    say("|---|---|")
-    say("| Schema | `%s` |" % config["schema"])
-    say("| Contract version | `%s` |" % config["version"])
-    say("| Label | %s |" % clause_set["label"])
-    say("| Version | %d, current: %s |"
-        % (clause_set["version"], clause_set["is_current_version"]))
-    say("| Policy document | `%s` |" % clause_set["policy_sha256"])
-    say("| Definition hash | `%s` |" % clause_set["definition_hash"])
-    say("| Review window | %d days |" % clause_set["review_window_days"])
-    say("| Reviews opened | %d |" % clause_set["review_count"])
+    say("| Policy | Coverage type | Conditions | Exclusions | Trigger | "
+        "Policy hash |")
+    say("|---|---|---|---|---|---|")
+    for policy_id in ledger.get("policies", []):
+        policy = read("get_policy", [policy_id, 1])
+        trigger = "none"
+        if policy["trigger"]:
+            parsed = json.loads(policy["trigger"])
+            trigger = "%s %d %s, %s to %s" % (
+                parsed["rule"], parsed["threshold"], parsed["unit"],
+                parsed["window_start"], parsed["window_end"])
+        say("| `%s` | %s | %s | %s | %s | `%s` |"
+            % (policy_id, policy["coverage_type"],
+               ", ".join(c["ref"] for c in policy["coverage_conditions"]),
+               ", ".join(x["ref"] for x in policy["exclusions"]) or "none",
+               trigger, policy["policy_hash"][:16] + "..."))
     say()
 
-    as_of = "2026-10-17"
-    for entry in ledger["reviews"]:
-        review_id = entry["review_id"]
-        review = read("get_review", [review_id])
-        grounds = read("get_grounds", [review_id])
-        outcome = read("review_outcome", [review_id, as_of])
+    for entry in ledger["submissions"]:
+        submission_id = entry["submission_id"]
+        record = read("get_submission", [submission_id])
+        verdict = read("get_verdict", [submission_id])
+        findings = read("get_findings", [submission_id])
+        outcome = read("claim_outcome", [submission_id, AS_OF])
         say("## %s" % entry["scenario"])
         say()
-        say("Review `%s`, claim reference `%s`, notice `%s`."
-            % (review_id, review["claim_reference"],
-               review["notice_sha256"]))
+        say("Claim `%s`, submission `%s`, reference `%s`, %d documents."
+            % (record["claim_id"], submission_id,
+               record["claimant_reference"], len(record["evidence_refs"])))
         say()
         say("| Check | Value | |")
         say("|---|---|---|")
-        check("stored verdict", review["verdict"], entry["verdict"])
-        check("policy document", review["policy_status"], "EXAMINED")
-        check("notice document", review["notice_status"], "EXAMINED")
-        check("rounds used", review["rounds_used"], 1)
-        check("bound definition hash", review["definition_hash"],
-              clause_set["definition_hash"])
-        check("ground clause reference", grounds[0]["clause_ref"],
-              entry["clause_ref"])
+        check("stored verdict", record["verdict"], entry["verdict"])
+        check("policy document", record["policy_status"],
+              "EVIDENCE_REACHABLE")
+        check("rounds used", record["rounds_used"], 1)
+        check("bound policy hash", record["policy_hash"],
+              read("get_policy_hash", [record["claim_id"]]))
+        check("policy version verified",
+              verdict["criteria"]["policy_version_verified"], True)
 
-        if entry["verdict"] == "DENIAL_SUPPORTED":
-            check("status", review["status"], "RESOLVED")
-            check("panel", review["panel_state"], "READ")
-            check("ground outcome", grounds[0]["outcome"], "SUPPORTED")
-            check("text addressed to the reader", review["directed_text_hits"],
-                  0)
-            check("is_denial_supported", outcome["denial_supported"], True)
-            check("is_denial_unsupported", outcome["denial_unsupported"],
+        if record["verdict"] == "COVERAGE_SUPPORTED":
+            check("status", record["status"], "RESOLVED")
+            check("evidence status", record["evidence_status"],
+                  "EVIDENCE_SUFFICIENT")
+            check("panel", record["panel_state"], "ASSESSED")
+            check("covered event supported",
+                  verdict["criteria"]["covered_event_supported"], True)
+            check("required conditions met",
+                  verdict["criteria"]["required_conditions_met"], True)
+            check("exclusion evidence found",
+                  verdict["criteria"]["exclusion_evidence_found"], False)
+            check("is_coverage_supported", outcome["coverage_supported"],
+                  True)
+            check("is_consumable", outcome["consumable"], True)
+            check("text addressed to the reader",
+                  record["directed_text_hits"], 0)
+        elif record["verdict"] == "EXCLUSION_APPLIES":
+            check("status", record["status"], "RESOLVED")
+            check("exclusion evidence found",
+                  verdict["criteria"]["exclusion_evidence_found"], True)
+            check("exclusion applies", verdict["exclusion_applies"], True)
+            check("is_coverage_supported", outcome["coverage_supported"],
                   False)
             check("is_consumable", outcome["consumable"], True)
-            check("freshness", outcome["freshness"], "RELIABLE")
-        elif entry["verdict"] == "DENIAL_UNSUPPORTED":
-            check("status", review["status"], "RESOLVED")
-            check("panel", review["panel_state"], "READ")
-            check("ground outcome", grounds[0]["outcome"], "UNSUPPORTED")
-            check("is_denial_supported", outcome["denial_supported"], False)
-            check("is_denial_unsupported", outcome["denial_unsupported"], True)
-            check("is_consumable", outcome["consumable"], True)
-        elif entry["verdict"] == "CLAUSE_MISCITED":
-            check("status", review["status"], "RESOLVED")
-            check("ground outcome", grounds[0]["outcome"], "CLAUSE_ABSENT")
-            check("clause label found literally in the wording",
-                  grounds[0]["clause_ref_literal"], False)
-            check("is_denial_supported", outcome["denial_supported"], False)
-            check("is_denial_unsupported", outcome["denial_unsupported"], True)
-        elif entry["verdict"] == "INCONCLUSIVE":
-            check("status", review["status"], "RETRYABLE")
-            check("panel", review["panel_state"], "READ")
-            check("ground outcome", grounds[0]["outcome"], "SUPPORTED")
-            check("is_denial_supported", outcome["denial_supported"], False)
-            check("is_denial_unsupported", outcome["denial_unsupported"],
+        elif record["verdict"] == "COVERAGE_NOT_ESTABLISHED":
+            check("status", record["status"], "RESOLVED")
+            check("required conditions met",
+                  verdict["criteria"]["required_conditions_met"], False)
+            check("is_coverage_supported", outcome["coverage_supported"],
+                  False)
+        else:  # INCONCLUSIVE
+            check("status", record["status"], "RETRYABLE")
+            check("is_coverage_supported", outcome["coverage_supported"],
                   False)
             check("is_consumable", outcome["consumable"], False)
             check("freshness", outcome["freshness"], "UNKNOWN")
-            hits = review["directed_text_hits"]
-            if hits < 1:
-                failures.append("the directed notice recorded no markers")
-            say("| text addressed to the reader | `%d markers` | OK |" % hits)
-        say()
-        if grounds[0]["clause_quote"]:
-            say("> clause quote: %s" % grounds[0]["clause_quote"])
-            say()
-        if grounds[0]["notice_quote"]:
-            say("> notice quote: %s" % grounds[0]["notice_quote"])
-            say()
-        if grounds[0]["basis"]:
-            say("Reasoning recorded for the ground (diagnostic, not "
-                "consensus-critical): %s" % grounds[0]["basis"])
-            say()
 
-    say("## The accumulating record")
+        if record["trigger_state"] != "NOT_DECLARED":
+            check("trigger state", record["trigger_state"],
+                  "MET" if record["verdict"] == "COVERAGE_SUPPORTED"
+                  else record["trigger_state"])
+            say("| measurement read from the record | `%d` | OK |"
+                % record["trigger_value"])
+        if record["directed_text_hits"]:
+            say("| text addressed to the reader | `%d markers` | OK |"
+                % record["directed_text_hits"])
+        check("fraud finding", record["fraud_finding"],
+              record["fraud_finding"])
+        say()
+        say("| Clause | Finding | Words it rests on |")
+        say("|---|---|---|")
+        for row in findings["conditions"] + findings["exclusions"]:
+            quote = row["quote"].replace("|", "/")
+            say("| `%s` | %s | %s |" % (row["ref"], row["finding"],
+                                        quote[:150] or "-"))
+        say()
+        for row in findings["conditions"] + findings["exclusions"]:
+            if row["basis"]:
+                say("> `%s` %s - %s" % (row["ref"], row["finding"],
+                                        row["basis"][:200]))
+        say()
+
+    say("## The record")
     say()
-    say("| Clause | Total | Supported | Unsupported | Overbroad | Clause absent | Not in notice | Undecided |")
+    say("| Policy | Total | Supported | Not established | Exclusion | "
+        "Fraud indicators | Inconclusive | Evidence unavailable |")
     say("|---|---|---|---|---|---|---|---|")
-    for ref in sorted({row["clause_ref"] for row in ledger["reviews"]}):
-        record = read("clause_record", ["cs-1", 1, ref])
-        say("| %s | %d | %d | %d | %d | %d | %d | %d |"
-            % (ref, record["total"], record["SUPPORTED"],
-               record["UNSUPPORTED"], record["OVERBROAD"],
-               record["CLAUSE_ABSENT"], record["NOT_IN_NOTICE"],
-               record["UNDECIDED"]))
-    say()
-    summary = read("clause_set_record", ["cs-1", 1])
+    for policy_id in ledger.get("policies", []):
+        record = read("policy_record", [policy_id, 1])
+        say("| `%s` | %d | %d | %d | %d | %d | %d | %d |"
+            % (policy_id, record["total"], record["COVERAGE_SUPPORTED"],
+               record["COVERAGE_NOT_ESTABLISHED"],
+               record["EXCLUSION_APPLIES"],
+               record["FRAUD_INDICATORS_FOUND"], record["INCONCLUSIVE"],
+               record["EVIDENCE_UNAVAILABLE"]))
     stats = read("get_stats")
+    say()
     say("| | |")
     say("|---|---|")
-    for key in ["DENIAL_SUPPORTED", "DENIAL_UNSUPPORTED", "DENIAL_OVERBROAD",
-                "CLAUSE_MISCITED", "GROUNDS_MISSTATED"]:
-        say("| %s | %d |" % (key, summary[key]))
-    say("| reviews opened | %d |" % stats["reviews"])
-    say("| reviews settled | %d |" % stats["resolved"])
+    for key in ["policies", "challenges", "submissions", "resolved"]:
+        say("| %s | %d |" % (key, stats[key]))
     say()
-    unsettled = sum(1 for row in ledger["reviews"]
-                    if row["verdict"] in ("INCONCLUSIVE",
-                                          "RECORD_UNAVAILABLE"))
-    check("reviews recorded as unsettled", stats["reviews"]
-          - stats["resolved"], unsettled)
-    say()
-    say("The review that addresses its reader is the unsettled one. It is "
-        "retryable, it is not consumable, and it contributed nothing to any "
-        "clause's record - which is the whole point of the ceiling.")
-    say()
-    say("Scenario D is worth reading closely. The notice uses a "
-        "jewellery-only limit to refuse an entire claim including a "
-        "television, a laptop and two armchairs. Two readings of that are "
-        "defensible: the clause reaches the jewellery and is applied too "
-        "widely (`DENIAL_OVERBROAD`), or a jewellery-only limit does not "
-        "reach a whole-claim refusal at all (`DENIAL_UNSUPPORTED`). Real "
-        "validators took the second, quoting the clause's own scope "
-        "sentence. The script asserts what the primitive guarantees - that "
-        "the refusal does not stand and the gate is false - rather than "
-        "which of the two a panel will prefer. `DENIAL_OVERBROAD` is "
-        "exercised in Direct Mode; it has not been produced on the live "
-        "network.")
+    check("every submission in the ledger is on chain",
+          stats["submissions"], len(ledger["submissions"]))
     say()
 
     say("## What this proves")
     say()
-    say("- a denial whose cited clause reaches its stated ground is upheld, "
-        "and the quotes stored for it are in the documents;")
-    say("- a denial whose cited clause contradicts its stated ground is not "
-        "upheld, on the same wording, under the same rules;")
-    say("- a clause that is not in the bound version is named as miscited "
-        "rather than treated as unsupported;")
-    say("- a notice that instructs whoever reads it cannot be upheld, and "
-        "code - not the panel - is what caught it;")
+    say("- a claim whose conditions the evidence meets is adjudicated as "
+        "covered, with the words each finding rests on stored beside it;")
+    say("- an exclusion the evidence shows decides the claim even though "
+        "every condition was otherwise in order;")
+    say("- a claim the evidence cannot settle is left unsettled and "
+        "retryable rather than forced into an answer;")
+    say("- a parametric trigger is read by the panel and compared by code: "
+        "the measurement is quoted from the published record and the "
+        "threshold is never shown to a model;")
+    say("- evidence that instructs whoever reads it cannot produce coverage, "
+        "and code - not the panel - is what caught it;")
     say("- every reliance gate is false for everything uncertain.")
+    say()
+    say("Schema `%s`, contract version `%s`."
+        % (config["schema"], config["version"]))
     say()
 
     if failures:

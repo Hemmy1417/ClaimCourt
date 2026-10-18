@@ -243,6 +243,37 @@ def test_a_panel_state_that_contradicts_the_record_is_refused(module,
                                  context, None, None) is None
 
 
+def test_a_payload_cannot_hide_a_missing_required_document(module,
+                                                           adjudicated):
+    """The list of missing required kinds is a consequence of the document
+    rows, not a claim the leader gets to make. A payload that reports a
+    document unreadable and the requirement met is refused."""
+    _harness, _policy, _submission, context, payload = adjudicated
+    assert payload["missing_required_kinds"] == []
+
+    hidden = copy.deepcopy(payload)
+    hidden["rows"][1]["status"] = "EVIDENCE_UNAVAILABLE"
+    hidden["rows"][1]["reason"] = "FETCH_FAILED"
+    hidden["rows"][1]["byte_count"] = 0
+    # the invoice is a required kind, and this payload does not say so
+    assert hidden["missing_required_kinds"] == []
+    assert module._parse_payload(_restate(module, context, hidden),
+                                 context, None, None) is None
+
+    # ... and the same payload that does say so is refused for the other
+    # reason: the panel cannot have assessed a claim it was never convened
+    # for. Stated together so neither rule is doing the other's work.
+    honest = copy.deepcopy(hidden)
+    honest["missing_required_kinds"] = ["invoice"]
+    assert module._parse_payload(_restate(module, context, honest),
+                                 context, None, None) is None
+
+    invented = copy.deepcopy(payload)
+    invented["missing_required_kinds"] = ["invoice"]
+    assert module._parse_payload(_restate(module, context, invented),
+                                 context, None, None) is None
+
+
 def test_a_status_without_its_reason_is_refused(module, adjudicated):
     _harness, _policy, _submission, context, payload = adjudicated
     forged = copy.deepcopy(payload)

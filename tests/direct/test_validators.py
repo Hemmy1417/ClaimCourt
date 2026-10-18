@@ -382,3 +382,85 @@ def test_an_unexplained_leader_failure_is_rejected(adjudicated):
     assert harness.vm.run_validator(leader_error=Exception("boom")) is False
     assert harness.vm.run_validator(
         leader_error=Exception("[EXPECTED] no such submission")) is False
+
+
+def _coherent(harness, payload):
+    """Restate a forged payload so it is internally consistent.
+
+    The gate refuses a payload whose outcome does not follow from its own
+    findings, so an incoherent forgery never reaches the comparison. These
+    forgeries are coherent: the only thing wrong with them is that they are
+    not what this node read.
+    """
+    import sys
+    module = sys.modules[type(harness.contract).__module__]
+    record = harness.contract.submissions.get(payload["submission_id"])
+    context = harness.contract._context(record)
+    context["round"] = payload["round"]
+    payload["criteria"] = module._criteria(context, payload)
+    payload["verdict"] = module._derive_verdict(context, payload)
+    return payload
+
+
+def test_a_coherent_but_untrue_adjudication_is_rejected(adjudicated):
+    """The hardest case: a payload that passes every structural check, whose
+    verdict follows from its own findings, and which this node simply did
+    not read. Only the comparison can catch it."""
+    harness, _submission_id, payload = adjudicated
+    assert payload["verdict"] == "COVERAGE_SUPPORTED"
+
+    refused = _coherent(harness, copy.deepcopy(payload))
+    refused["findings"]["conditions"][0]["finding"] = "NOT_MET"
+    refused = _coherent(harness, refused)
+    assert refused["verdict"] == "COVERAGE_NOT_ESTABLISHED"
+    assert _vote(harness, refused) is False
+
+    excluded = copy.deepcopy(payload)
+    excluded["findings"]["exclusions"][0]["finding"] = "EVIDENCED"
+    excluded["findings"]["exclusions"][0]["quote"] = INVOICE_ALT
+    excluded["findings"]["exclusions"][0]["evidence_id"] = "E2"
+    excluded = _coherent(harness, excluded)
+    assert excluded["verdict"] == "EXCLUSION_APPLIES"
+    assert _vote(harness, excluded) is False
+
+    unsettled = copy.deepcopy(payload)
+    for row in unsettled["findings"]["conditions"]:
+        row.update({"finding": "UNCLEAR", "quote": "", "evidence_id": ""})
+    unsettled = _coherent(harness, unsettled)
+    assert unsettled["verdict"] == "INCONCLUSIVE"
+    assert _vote(harness, unsettled) is False
+
+
+def test_a_coherent_claim_that_the_documents_were_unreadable_is_rejected(
+        adjudicated):
+    """Same idea for the facts: a payload that says the policy could not be
+    fetched, consistent all the way through, from a node that fetched it."""
+    harness, _submission_id, payload = adjudicated
+
+    unfetched = copy.deepcopy(payload)
+    unfetched["policy_status"] = "EVIDENCE_UNAVAILABLE"
+    unfetched["policy_reason"] = "FETCH_FAILED"
+    unfetched["panel_state"] = "SKIPPED"
+    for row in unfetched["findings"]["conditions"]:
+        row.update({"finding": "NOT_ASSESSED", "quote": "",
+                    "evidence_id": ""})
+    for row in unfetched["findings"]["exclusions"]:
+        row.update({"finding": "NOT_ASSESSED", "quote": "",
+                    "evidence_id": ""})
+    unfetched["findings"]["evidence"].update(
+        {"sufficient": False, "contradiction": False, "quote": "",
+         "evidence_id": ""})
+    unfetched = _coherent(harness, unfetched)
+    assert unfetched["verdict"] == "EVIDENCE_UNAVAILABLE"
+    assert _vote(harness, unfetched) is False
+
+    missing = copy.deepcopy(unfetched)
+    missing["policy_status"] = "EVIDENCE_REACHABLE"
+    missing["policy_reason"] = ""
+    missing["rows"][1]["status"] = "EVIDENCE_UNAVAILABLE"
+    missing["rows"][1]["reason"] = "FETCH_FAILED"
+    missing["rows"][1]["byte_count"] = 0
+    missing["missing_required_kinds"] = ["invoice"]
+    missing = _coherent(harness, missing)
+    assert missing["verdict"] == "EVIDENCE_UNAVAILABLE"
+    assert _vote(harness, missing) is False

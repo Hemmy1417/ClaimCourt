@@ -1,136 +1,143 @@
 # Submission notes
 
-Copy-ready. Every number here is one a command in this repository printed;
-nothing is estimated.
+Copy-ready. Every number here is one a command printed; nothing is
+estimated.
 
 ## Identity
 
 | Field | Value |
 |---|---|
 | Category | Standalone GenLayer Intelligent Contract |
-| Title | ClaimCourt — review of a stated denial against the rule it cites |
+| Title | ClaimCourt — adversarial insurance claim adjudication |
 | Repository | https://github.com/Hemmy1417/ClaimCourt |
 | Licence | MIT |
 | Network | GenLayer Studionet, chain 61999 |
 
 **One-line thesis.** ClaimCourt is a reusable GenLayer Intelligent Contract
-that decides, under validator consensus, whether a refusal's stated reasons
-are supported by the policy clauses they cite.
+that decides, under validator consensus, whether a submitted claim satisfies
+the conditions for coverage declared by a specific version of a policy, on
+evidence every validator fetches and hashes itself.
 
 ## Canonical deployment
 
 | Field | Value |
 |---|---|
-| Contract | `0x78188E7554564606401b7f3B368076D08e0ef63E` |
-| Explorer (portal evidence URL) | https://explorer-studio.genlayer.com/address/0x78188E7554564606401b7f3B368076D08e0ef63E |
-| Deployment tx | `0xab2cf9e468989f88f24e145a77347ad5edb23e9977cc2f0e366e942f30b0397c` |
+| Contract | `0x4a8B2310fC929f68C73c7F6eE563c8ec3916eA2a` |
+| Explorer (portal evidence URL) | https://explorer-studio.genlayer.com/address/0x4a8B2310fC929f68C73c7F6eE563c8ec3916eA2a |
+| Deployment tx | `0x7672910d8d84f12df786b3e728a7027288a717d1828607225301087391e9bb93` |
 | Lifecycle | FINALIZED, execution SUCCESS, 3 agree / 0 disagree / 2 idle of 5 |
-| Deployment source | commit `0ddcd67`, `contracts/claimcourt.py`, blob `bd2ab2f0ec2ec905482d49b731a5716abdc81f81` |
-| Source parity | deployed bytes byte-identical to the committed source (sha256 `c2efcd3441e4271fca6273b66dd2e9bd7a2e4b288a2ef05faaa98e52dc346ed9`) |
-
+| Deployment source | commit `4a6fcc9`, `contracts/claimcourt.py` |
+| Source parity | deployed bytes byte-identical to the committed source (sha256 `4a3275c680178a849c81b370bf68c96b07b08416bd54ab513da478d5bbf9fdb4`) |
 
 ## Why GenLayer is required
 
-Checking a prose reason against a prose rule is reading, and the party that
-wrote the refusal normally controls that reading — its own staff, its own
-chosen reviewer, or a model behind its own backend. Remove GenLayer and the
-contract loses the only two inputs it cannot compute: whether the cited
-clause is in the bound document at all, and whether that clause as written
-reaches the ground the notice gave. Keep a single reader instead of
-consensus and it loses the ability to tell a true reading from a purchased
-one — including against a notice that addresses its reader directly, which
-one demonstration fixture does on purpose.
+Deciding a claim means reading policy wording against incident reports,
+invoices, assessors' figures and published records. Remove GenLayer and the
+contract loses the only three inputs it cannot compute: whether each
+coverage condition is met on this evidence, whether an exclusion is
+evidenced, and whether the documents contradict each other. Keep a single
+reader instead of consensus and it loses the ability to tell a true reading
+from a purchased one — including against a claimant's own document that
+instructs whoever reads it, which one demonstration fixture does on purpose.
 
 ## Consensus mechanism
 
-One `gl.vm.run_nondet_unsafe` round with a custom validator. The leader
-fetches both hash-bound documents, hashes them before reading them, counts
-text addressed to the reader in code, computes two literal triage bits per
-ground, convenes one panel call with `response_format="json"`, reads the
-answer strictly, holds every positive answer to a quote from the bytes it
-verified, and derives each ground's outcome in code. Each validator
-reproduces the entire round from its own fetches and its own panel call,
-then gates the leader's payload against its own verified bytes — type by
-type, enum by enum, binding by binding, quote by quote — and compares the
-decision fields. Reasoning prose and the choice of grounded span may
-differ; nothing that decides the verdict may.
+One `gl.vm.run_nondet_unsafe` round with a custom validator. Every node
+fetches and hashes the policy document and every evidence document itself,
+counts text addressed to the reader in code, works out in code which
+required kinds are actually readable, convenes one panel call, reads the
+answer strictly, holds every finding to a quote from the bytes it verified,
+compares any parametric measurement with the threshold in code, and derives
+the four criteria and the verdict in code. Each validator reproduces all of
+that independently and gates the leader's payload against its own bytes
+before comparing.
+
+Validators must agree on the facts and the verdict: the identifiers and
+bindings, both document digests, each document's status and reason, the
+missing-kinds list, the directed-text count, the panel state, the
+measurement, the trigger state, and the verdict itself. They may differ on
+the label of an individual condition, on the criteria where the verdict does
+not pin them, on which grounded span was quoted, and on the reasoning. That
+is safe because the gate re-derives the outcome from the payload's own
+findings and refuses one that does not follow.
 
 ## Deterministic responsibilities
 
-Authorisation, identifiers, both document hashes, URL admission, every
-bound, the literal triage bits, the directed-text count, quote grounding,
-per-ground outcomes, verdict precedence, the directed-text ceiling, status
-transitions and terminal replay, the notice registry, counters, freshness
-arithmetic and every reliance gate. The model is never asked what the
-verdict is, and never asked whether anything should be paid.
+Authorisation, versioning, the policy hash over the whole definition, every
+document digest, URL admission, the claim deadline, the required evidence
+kinds, every bound, the directed-text count, quote grounding, the parametric
+comparison, the four criteria, verdict precedence, status transitions and
+terminal replay, the counters, freshness and every reliance gate. The model
+is never asked what the verdict is, nor whether a threshold was crossed.
 
 ## Failure policy
 
 Fail closed throughout. An unfetchable, substituted, oversized or unreadable
-document gives `RECORD_UNAVAILABLE`; an unusable panel answer gives
-`INCONCLUSIVE`; an ungrounded "located" is not located; an unknown enum or
-wrong type is a failure rather than a default; a notice that addresses its
-reader cannot be upheld. `is_consumable` is false for every retryable
-state, for a withdrawn review, for a revoked clause version and for a stale
-one. Retries are capped at three rounds, after which the review resolves
-unsettled and is never consumable.
+document gives `EVIDENCE_UNAVAILABLE`; an unusable panel answer or an
+unsettled condition gives `INCONCLUSIVE`; an ungrounded finding is
+downgraded to uncertainty, never to its opposite; an unknown value or wrong
+type is a failure rather than a default; evidence that addresses its reader
+cannot win coverage. Retries are capped at three rounds, after which the
+claim resolves unsettled and is never consumable. A claim not established is
+never called fraud.
 
 ## Reuse surface
 
-`is_denial_supported(review_id, as_of)` is the fail-closed boolean,
-`is_denial_unsupported(...)` its counterpart, `review_outcome(...)` the
-full picture including the definition hash the verdict was read against,
-and `clause_record(clause_set_id, version, clause_ref)` the accumulating
-per-clause signal. Three consumers that need no change to the contract:
-dispute platforms deciding whether to escalate a refusal, settlement
-contracts holding a disputed amount until a refusal fails review, and
-conduct monitors watching which clauses produce refusals that keep failing
-review.
+`is_coverage_supported(submission_id, as_of)` is the fail-closed boolean,
+`claim_outcome(...)` the full picture, `get_verdict(...)` the structured
+result with the four criteria, and `policy_record(policy_id, version)` the
+accumulating record. Three consumers that need no change to the contract:
+claims administration systems deciding whether to pay, request more evidence
+or escalate; settlement contracts holding a disputed amount; and parametric
+systems consuming trigger determinations. Nothing in the contract moves
+money.
 
 ## Test results
 
 | Gate | Result |
 |---|---|
-| source invariants (`scripts/preflight.py`) | 131/131 |
-| Direct Mode (`pytest tests/direct -q`) | 183 passed, 0 failed, 0 skipped |
+| source invariants (`scripts/preflight.py`) | 167/167 |
+| Direct Mode (`pytest tests/direct -q`) | 229 passed, 0 failed, 0 skipped |
 | pickling checks | on, passing |
 | GenVM AST lint | passed, 3 checks |
-| GenVM SDK validation | passed, 28 methods (20 view, 8 write) |
-| mutation sweep (`scripts/mutate.py`) | 29/29 killed, no survivors |
+| GenVM SDK validation | passed, 29 methods (20 view, 9 write) |
+| mutation sweep (`scripts/mutate.py`) | <!-- SWEEP --> |
+| hosted integration | <!-- INTEGRATION --> |
+| CI (`.github/workflows/gates.yml`) | the offline gates on ubuntu, green |
 
 ## Live evidence
 
-Twelve transactions, every one FINALIZED with execution SUCCESS, all
-re-read off the network by `python scripts/verify.py` (read-only, no keys):
+Five synthetic claims under three policies, adjudicated by real validators
+on the canonical deployment, then re-read off the network by
+`python scripts/verify.py` (read-only, no keys):
 
-| Scenario | Stored verdict | Gate |
-|---|---|---|
-| a refusal whose cited clause reaches its ground | `DENIAL_SUPPORTED` | consumable, `is_denial_supported` true |
-| a refusal whose cited clause contradicts its ground | `DENIAL_UNSUPPORTED` | consumable, `is_denial_supported` false |
-| a refusal citing a clause absent from the wording | `CLAUSE_MISCITED` | `is_denial_supported` false |
-| a jewellery-only limit used to refuse a whole claim | `DENIAL_UNSUPPORTED` | consumable, `is_denial_supported` false |
-| a refusal whose notice instructs whoever reads it | `INCONCLUSIVE`, retryable | every gate false, nothing added to any clause record |
+| Scenario | Stored verdict |
+|---|---|
+| a claim whose conditions the evidence meets | `COVERAGE_SUPPORTED` |
+| an exclusion the assessor's own words evidence | `EXCLUSION_APPLIES` |
+| a theft condition the evidence does not settle | `INCONCLUSIVE` |
+| a parametric trigger, 182 mm read from the published record | `COVERAGE_SUPPORTED`, trigger `MET` |
+| evidence that instructs whoever reads it | `INCONCLUSIVE`, retryable, not consumable |
 
-Three of the five readings carry a dissenting validator minority while the
-majority carried - validators deciding rather than deferring.
-`DENIAL_OVERBROAD` is exercised in Direct Mode and has not been produced
-live; `docs/DEPLOYMENT.md` records why. Full detail, including the sentences
-the panel quoted and each node re-checked: `docs/proofs/live.md`.
-
+Three earlier live runs are recorded in `docs/DEPLOYMENT.md` rather than
+hidden: two taught that the equivalence rule was too strict and split the
+round, and one showed that a covered event cannot be established by the
+claimant's own account of it. Full detail, including the sentences each
+finding rests on: `docs/proofs/live.md`.
 
 ## Limitations
 
-Not legal advice, not a regulatory determination, not an ombudsman
-decision, and no verdict obliges anyone to pay anything.
-`DENIAL_UNSUPPORTED` says a stated reason did not stand up on the two
-documents reviewed — not that the claim is valid. `DENIAL_SUPPORTED` says
-the stated reasons stood up as written — not that the decision was fair or
-lawful. The contract cannot tell whether published wording is the wording a
-claimant bought. URL rules are defence in depth, not SSRF prevention.
-Prompt-injection handling is layered, not immune. Documents must be public,
-because a validator has to fetch them. Studionet deployment for
-demonstration and reuse, not an audited production system. Every fixture is
-synthetic and labelled.
+Not legal advice, not a regulatory determination, not a replacement for a
+licensed adjuster. `COVERAGE_SUPPORTED` does not guarantee payment and
+nothing in the contract moves money. `COVERAGE_NOT_ESTABLISHED` is not a
+finding that a claim is false, and `FRAUD_INDICATORS_FOUND` is indicators in
+these documents under this policy's own question, not a determination of
+fraud. The contract cannot tell whether a published wording is the policy a
+claimant holds. URL rules are defence in depth, not SSRF prevention.
+Prompt-injection handling is layered, not immune. A genuinely close claim
+may land on `INCONCLUSIVE`, as one live scenario did. Studionet deployment
+for demonstration and reuse, not an audited production system. Every fixture
+is synthetic and labelled.
 
 ## Reviewer fast path
 
@@ -148,16 +155,16 @@ No network, no keys, no GenLayer account.
 ## Portal submission
 
 This is an **Intelligent Contract** contribution, not a Project. There is no
-app, no frontend and no user journey: the deliverable is one deployed
-contract and the evidence that it does what it says.
+app and no user journey: the deliverable is one deployed contract and the
+evidence that it does what it says.
 
 The portal validates one evidence URL specifically as
 `genlayer-explorer-contract`. For a Studionet contract that is the Explorer
-**address** page - not the repository, not a transaction, not the Studio
+**address** page — not the repository, not a transaction, not the Studio
 import link:
 
 ```text
-https://explorer-studio.genlayer.com/address/0x78188E7554564606401b7f3B368076D08e0ef63E
+https://explorer-studio.genlayer.com/address/0x4a8B2310fC929f68C73c7F6eE563c8ec3916eA2a
 ```
 
 Supporting evidence, where the form allows more than one link:
@@ -171,37 +178,33 @@ Supporting evidence, where the form allows more than one link:
 **Title**
 
 ```text
-ClaimCourt - review of a stated denial against the rule it cites
+ClaimCourt - adversarial insurance claim adjudication
 ```
 
-**Description** - the measured block under "Portal description" below, 971
-characters.
-
-**One-liner**, if the form asks for one (173 characters):
+**One-liner**, if the form asks for one:
 
 ```text
-Reviews whether a refusal's stated reasons are supported by the policy clauses they cite, under validator consensus, and records a typed verdict other contracts can rely on.
+Decides, under validator consensus, whether a claim satisfies the coverage conditions of a specific policy version, on evidence every validator fetches and hashes itself.
 ```
 
-**Verification outcome**, if the form asks for one (450 characters):
+(170 characters, limit 180.)
+
+**Verification outcome**, if the form asks for one:
 
 ```text
-Open the contract on the explorer and read any review: it stores the verdict, each ground's outcome, and the sentences quoted from both documents. The wording and the notice are each bound to the hash of their exact bytes, so anyone can fetch them, hash them, and confirm what was read. A read-only script in the repository re-queries every transaction and re-reads every stored result, and the deployed contract decodes back to the committed source.
+Open the contract on the explorer and read any claim: it stores the verdict, each condition and exclusion, and the words every finding rests on. The policy and each document are bound to the hash of their exact bytes, so anyone can fetch them, hash them, and confirm what was read. A read-only script in the repository re-queries every transaction and re-reads every stored result, and the deployed contract decodes back to the committed source.
 ```
+
+(445 characters, limit 500.)
 
 No addresses, hashes, identifiers or shell commands appear in any text
 field; the contract address belongs only in the validated evidence URL.
-
-**Contribution date** is the day you submit, not the build date.
-
-A 512px raster of the mark is at `docs/assets/claimcourt-mark-512.png` if the
-form asks for an image. The seven-step "how to use it" walkthrough and the
-live-site evidence row that a Project submission wants do not apply here.
-If the form shows fields this section does not cover, tell me what it asks
-for and I will measure the text for them.
+**Contribution date** is the day you submit, not the build date. A 512px
+raster of the mark is at `docs/assets/claimcourt-mark-512.png` if the form
+asks for an image.
 
 ## Portal description (under 1000 characters)
 
-ClaimCourt is a standalone GenLayer Intelligent Contract that reviews a refusal against the rule it cites. A decider publishes wording, bound to the hash of its exact bytes. Anyone opens a review of a refusal notice, also hash-bound, naming each clause cited and each ground given. In one consensus round every validator fetches and hashes both documents itself and judges whether the clause as written reaches that ground, re-checking every quote against the bytes it verified, so nothing invented survives. Deterministic code owns authorisation, versioning, precedence and every reliance gate, and names the verdict: supported, unsupported, overbroad, miscited, misstated, inconclusive or unavailable. A notice that instructs its reader cannot be upheld. Consumers read one boolean, and a per-clause record accumulates. Verified with 183 Direct Mode tests, GenVM validation, a mutation sweep that caught every mutation, a live suite, and a FINALIZED Studionet deployment byte-identical to source.
+ClaimCourt is a standalone GenLayer Intelligent Contract that adjudicates insurance claims. An insurer publishes a policy version - coverage conditions, exclusions, the evidence a claim must carry - frozen and hashed before any claim arrives. A claimant submits a claim binding that version and every document to the hash of its exact bytes. In one consensus round each validator fetches and hashes the documents itself and judges whether the evidence meets each condition, quoting the words it relies on; every quote is re-checked against the bytes that node verified. Deterministic code owns deadlines, required evidence, precedence, any parametric threshold and every reliance gate, and names the verdict: supported, not established, exclusion applies, fraud indicators, inconclusive or evidence unavailable. Evidence that instructs its reader cannot win coverage, and nothing moves money. Verified with 229 tests, a mutation sweep, a live suite and a FINALIZED deployment identical to source.
 
-(998 characters.)
+(996 characters.)

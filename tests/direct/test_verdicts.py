@@ -249,6 +249,51 @@ def test_a_substituted_document_is_not_the_document(ready):
     assert record["evidence_refs"][1]["reason"] == "HASH_MISMATCH"
 
 
+def test_an_oversized_document_is_refused_before_it_is_read(ready):
+    harness, _policy_id, claim_id = ready
+    from conftest import sha_of
+    oversized = "x" * 200001
+    harness.clear()
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_OBSERVATION)
+    harness.mock_doc(STORM_INVOICE, body=oversized)
+    submission_id = harness.submit(claim_id, evidence=[
+        {"evidence_id": "E1", "kind": "incident_report",
+         "name": STORM_REPORT},
+        {"evidence_id": "E2", "kind": "invoice", "name": STORM_INVOICE,
+         "sha256": sha_of(oversized)},
+        {"evidence_id": "E3", "kind": "weather_record",
+         "name": STORM_OBSERVATION}])
+    # The bytes are the committed bytes, and they are still too large to
+    # read, so the invoice - a required kind - is not available.
+    assert harness.resolve(submission_id) == "EVIDENCE_UNAVAILABLE"
+    record = harness.contract.get_submission(submission_id)
+    assert record["evidence_refs"][1]["status"] == "EVIDENCE_UNAVAILABLE"
+    assert record["evidence_refs"][1]["reason"] == "TOO_LARGE"
+    assert record["evidence_refs"][1]["byte_count"] == 200001
+    assert record["panel_state"] == "SKIPPED"
+    assert harness.contract.is_coverage_supported(submission_id,
+                                                  TODAY_DATE) is False
+
+
+def test_a_document_that_is_not_readable_text_is_not_a_finding(ready):
+    harness, _policy_id, claim_id = ready
+    from conftest import sha_of
+    blank = "   " + chr(10) + "  "
+    harness.clear()
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_OBSERVATION)
+    harness.mock_doc(STORM_INVOICE, body=blank)
+    submission_id = harness.submit(claim_id, evidence=[
+        {"evidence_id": "E1", "kind": "incident_report",
+         "name": STORM_REPORT},
+        {"evidence_id": "E2", "kind": "invoice", "name": STORM_INVOICE,
+         "sha256": sha_of(blank)},
+        {"evidence_id": "E3", "kind": "weather_record",
+         "name": STORM_OBSERVATION}])
+    assert harness.resolve(submission_id) == "EVIDENCE_UNAVAILABLE"
+    assert harness.contract.get_submission(
+        submission_id)["evidence_refs"][1]["reason"] == "UNREADABLE"
+
+
 def test_an_unreadable_policy_is_never_a_finding(ready):
     harness, _policy_id, claim_id = ready
     harness.clear()

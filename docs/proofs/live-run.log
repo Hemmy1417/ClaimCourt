@@ -1,0 +1,118 @@
+# ClaimCourt live run
+
+network   GenLayer Studionet, chain 61999
+rpc       https://studio.genlayer.com/api
+commit    4a6fcc9
+
+document  policy-property-v1.txt              1920 bytes  e722d09d1871966a0357ed39d1f4bfbaa52488eec84ed4508df9f6b4b0c24ddd
+document  policy-crop-parametric-v1.txt       1789 bytes  6823b755367ccede4bd521e7d837a89fc022e1cd4d6a1b3fb336884b69c50a79
+document  incident-report-storm.txt           1298 bytes  6ae292e27f978ed190d61f9de3b98044048fcefe59f0f605abd2a195685254ed
+document  repair-invoice-storm.txt             966 bytes  ec7df4bf1068e7ba5367517e2bae0b02ad1775fa3e8fb83c1adaae810f4080c4
+document  assessor-report-gradual.txt         1403 bytes  1db8bca0106770fbee6cfacf092dcff8000b1de07e8577adf8be444705707306
+document  incident-report-no-forced-entry.txt  1139 bytes  7abc739dd783b493ceb560e0f4ab4cddf76c46307112f79bb03d233c45928a4d
+document  incident-report-directed.txt        1341 bytes  dfc69d151a7358e3f1e0dc7172c03e21d197b1b41cadffc61872cf6c522812cd
+document  rainfall-record-season.txt           941 bytes  d5e68cd30d47faf21270d9958c01a5f70b21d20c3693553ae4a2eb6b3d0e5ab5
+document  holding-statement-groundnut.txt      912 bytes  c1108d7eff346e187eaf24efbac2c603968f424f25952bfe6c81191f01c66ef9
+document  weather-observation-storm.txt       1241 bytes  e8f004b6a14ce97987f4a8559b4078c7cb27fc14d5a594588521daa1c2a12c51
+
+signer: generated for this run, 0x886BFCFA8BeD14641026F07dD755e13e263382C2
+faucet: funded 0x886BFCFA8BeD14641026F07dD755e13e263382C2
+deploying 108426 bytes, sha256 4a3275c680178a849c81b370bf68c96b07b08416bd54ab513da478d5bbf9fdb4
+deploy tx 0x7672910d8d84f12df786b3e728a7027288a717d1828607225301087391e9bb93
+deploy lifecycle ACCEPTED, execution SUCCESS, 3 agree, 0 disagree, 2 idle of 5
+contract 0x4a8B2310fC929f68C73c7F6eE563c8ec3916eA2a
+explorer https://explorer-studio.genlayer.com/address/0x4a8B2310fC929f68C73c7F6eE563c8ec3916eA2a
+
+## Policies
+  register_policy            tx 0x4724b45b14e19f58c30a4bacd95d2977d2c8ed3baa9714a10bd67063a3eeec56  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  pol-1 version 1, policy hash 1473fc13f7b46a62d9750efbaa3eaf69b650da8537a875654dbc9fdde064c602
+  register_policy            tx 0xf800d661f7634fd32dd8a0a0c1f0d9f178ac8375ebdcbe177fe48a91b9e779f1  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  pol-2 version 1, theft conditions
+  register_policy            tx 0xba81a8a3b10b02d84ff51d33ffadaeea987fe7a14a902a02c9cf64d4adf41f8b  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  pol-3 version 1, trigger AT_MOST 220 millimetres in the window 2026-06-01 to 2026-09-30
+
+## Scenario A - a claim that satisfies its policy
+  open_claim_challenge       tx 0x33d8b438790a5e840b0bdc74e06510b0fa50a795d1fce68af43ea0d96a9cc5bb  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  submit_claim               tx 0x218fabc2bca6756993e3a97286330efeb495d607295ee5bd482cf948bf6acd55  SUCCESS  3 agree, 0 disagree, 2 idle of 5
+  resolve_submission         tx 0x54920995ee80c9de28cdb5e346b02228cab7e8357097be0b3986d38b86e0509b  SUCCESS  3 agree, 2 disagree, 0 idle of 5
+    verdict                                    OK  (COVERAGE_SUPPORTED)
+    status                                     OK  (RESOLVED)
+    evidence status                            OK  (EVIDENCE_SUFFICIENT)
+    panel                                      OK  (ASSESSED)
+    policy version verified                    OK  (True)
+    covered event supported                    OK  (True)
+    required conditions met                    OK  (True)
+    exclusion evidence found                   OK  (False)
+    is_coverage_supported                      OK  (True)
+    C1  MET           a storm passed over the estate. Wind speeds recorded at the nearest station reached 97 km/h. A s
+    C2  MET           Reported to the insurer: 11 March 2026 Date the insured became aware of the loss: 3 March 2026
+    C3  MET           Strip and replace damaged stockroom ceiling panels 1,240 Replace damaged racking, four bays 2,18
+    X1  NOT_EVIDENCED 
+    X2  NOT_EVIDENCED 
+
+## Scenario B - an exclusion the evidence shows
+  open_claim_challenge       tx 0xaa6a6e2129fc2f108fb35d2795878cf02ab5f665c42e32d4b39ec9223f2cd3f6  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  submit_claim               tx 0xc601da3b07950f1b9e24397360838c7a39b9a441acd2c81a7a3b134c8805ef8f  SUCCESS  3 agree, 0 disagree, 2 idle of 5
+  resolve_submission         tx 0x6e784e0a9c416c16da53edc7a4d8a0a6d7e96cad7a2473559c7e5b403b55f839  SUCCESS  3 agree, 1 disagree, 1 idle of 5
+    verdict                                    OK  (EXCLUSION_APPLIES)
+    is_coverage_supported                      OK  (False)
+    C1  NOT_MET       nothing in the condition of these materials is consistent with a single event on that date.
+    C2  UNCLEAR       To report on damage to the stockroom ceiling and to the goods stored beneath it, claimed as stor
+    C3  UNCLEAR       the cartons at the back of the stack are degraded and partly collapsed, with old water marks
+    X1  EVIDENCED     this damage has developed over a long period - I would put it at not less than eighteen months o
+    X2  UNCLEAR       Attended: 18 June 2026
+
+## Scenario C - a condition the evidence does not meet
+  open_claim_challenge       tx 0xe2597d184265c3a5b8d21d03c504371d26b70450cd8374b1d0ad9660d195053e  SUCCESS  3 agree, 0 disagree, 2 idle of 5
+  submit_claim               tx 0x596c81252a396e50c563e6a1c3027c8381ea35acecbb05699d0f4bc275b5e879  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  resolve_submission         tx 0x3423be6d5ec162cf9eeed24bcd6f6d3bc2dd8ef2f8626fa4653894e7edfcb904  SUCCESS  3 agree, 1 disagree, 1 idle of 5
+    verdict                                    OK  (INCONCLUSIVE)
+    is_coverage_supported                      OK  (False)
+    C1  UNCLEAR       
+    C4  UNCLEAR       
+    X1  NOT_EVIDENCED 
+
+## Scenario D - a parametric trigger, compared in code
+  open_claim_challenge       tx 0x09a2cb6300fc04604597962590b03d78b62255f411c24fa82d6451bb49ac5566  SUCCESS  3 agree, 0 disagree, 2 idle of 5
+  submit_claim               tx 0xd1a0c5488d90114381733e0eafcc64a046db99f92685d4d274706e3e12672365  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  resolve_submission         tx 0xfef974c86d9f421fdfda11c1843bdec504ce51d69168cb518cb171e03647234b  SUCCESS  3 agree, 1 disagree, 1 idle of 5
+    verdict                                    OK  (COVERAGE_SUPPORTED)
+    measurement read from the record: 182 (trigger MET)
+    trigger state                              OK  (MET)
+    measurement                                OK  (182)
+
+## Scenario E - evidence that addresses its reader
+  open_claim_challenge       tx 0x7c83ecee7c5ccbe0a350994354b8e46118b8ca768078dd42dd0648fd2bbf63c9  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  submit_claim               tx 0xe237ffa7d02909d47e0460408ea529f90150f2b157acb628b40b55046a2c8513  SUCCESS  5 agree, 0 disagree, 0 idle of 5
+  resolve_submission         tx 0xbe6f9b6230ebed7d8f25ce6c91e61eb0786be25b393a3614e3f8854be110ea6d  SUCCESS  3 agree, 1 disagree, 1 idle of 5
+    verdict                                    OK  (INCONCLUSIVE)
+    status                                     OK  (RETRYABLE)
+    text addressed to the reader, counted in code: 5 marker(s)
+    is_coverage_supported                      OK  (False)
+    is_consumable                              OK  (False)
+    C1  MET           On the night of 2 to 3 March 2026 a storm passed over the estate. A section of the roof covering
+    C2  UNCLEAR       
+    C3  MET           INVOICE 4471 Synthetic Restoration Works Issued: 24 March 2026
+    X1  NOT_EVIDENCED 
+    X2  NOT_EVIDENCED 
+
+## The record
+
+    pol-1  {"COVERAGE_NOT_ESTABLISHED": 0, "COVERAGE_SUPPORTED": 1, "EVIDENCE_UNAVAILABLE": 0, "EXCLUSION_APPLIES": 1, "FRAUD_INDICATORS_FOUND": 0, "INCONCLUSIVE": 0, "policy_id": "pol-1", "policy_version": 1, "total": 2}
+    pol-2  {"COVERAGE_NOT_ESTABLISHED": 0, "COVERAGE_SUPPORTED": 0, "EVIDENCE_UNAVAILABLE": 0, "EXCLUSION_APPLIES": 0, "FRAUD_INDICATORS_FOUND": 0, "INCONCLUSIVE": 0, "policy_id": "pol-2", "policy_version": 1, "total": 0}
+    pol-3  {"COVERAGE_NOT_ESTABLISHED": 0, "COVERAGE_SUPPORTED": 1, "EVIDENCE_UNAVAILABLE": 0, "EXCLUSION_APPLIES": 0, "FRAUD_INDICATORS_FOUND": 0, "INCONCLUSIVE": 0, "policy_id": "pol-3", "policy_version": 1, "total": 1}
+    stats   {"challenges": 5, "policies": 3, "resolved": 3, "submissions": 5}
+
+## Summary
+
+| Scenario | Challenge | Submission | Stored verdict |
+|---|---|---|---|
+| A: claim satisfies the policy | `clm-1` | `sub-1` | `COVERAGE_SUPPORTED` |
+| B: exclusion evidenced | `clm-2` | `sub-2` | `EXCLUSION_APPLIES` |
+| C: condition not met | `clm-3` | `sub-3` | `INCONCLUSIVE` |
+| D: parametric trigger | `clm-4` | `sub-4` | `COVERAGE_SUPPORTED` |
+| E: evidence instructs its reader | `clm-5` | `sub-5` | `INCONCLUSIVE` |
+
+deployment 0x7672910d8d84f12df786b3e728a7027288a717d1828607225301087391e9bb93, lifecycle FINALIZED, execution SUCCESS, 3 agree, 0 disagree, 2 idle of 5
+contract   0x4a8B2310fC929f68C73c7F6eE563c8ec3916eA2a
+explorer   https://explorer-studio.genlayer.com/address/0x4a8B2310fC929f68C73c7F6eE563c8ec3916eA2a
