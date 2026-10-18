@@ -139,7 +139,29 @@ hosted Studionet with the fixtures pinned to the deployment commit:
 CLAIMCOURT_FIXTURE_REF=4a6fcc9 gltest tests/integration -v -s --network studionet
 ```
 
-<!-- INTEGRATION -->
+**Result: 5 passed in 1,063 s (17 min 44 s)**, 18 October 2026, against
+`contracts/claimcourt.py` at the deployment source commit.
+
+| Test | What it puts on the network |
+|---|---|
+| `test_deploy_and_public_surface` | a fresh deployment, then every view read back off chain |
+| `test_a_claim_that_satisfies_its_policy` | a well-evidenced claim through a real round |
+| `test_a_condition_the_evidence_does_not_meet` | a claim the documents do not establish |
+| `test_evidence_that_addresses_its_reader_cannot_win_coverage` | the directed-text fixture, which cannot reach coverage |
+| `test_an_unfetchable_required_document_is_not_a_finding` | a required document that 404s, which must fail closed |
+
+Two of those assertions were rewritten after an earlier run, and the reason
+is worth stating because it is a property of the network rather than of the
+contract. A round whose validators do not reach a majority **commits
+nothing**, while the leader receipt still reports SUCCESS - so
+`tx_execution_succeeded` is never the proof of anything here. The stored
+state is. `_adjudicate()` in the suite resolves again when the submission is
+still `PENDING` (legal, because nothing changed) and uses the contract's own
+`retry_submission` once when a committed round settled on `INCONCLUSIVE`.
+Each test then asserts the guarantee the contract owes - a well-evidenced
+claim is covered or unsettled, never refused; the directed fixture never
+reaches coverage; an unfetchable document is never a finding - rather than
+asserting which reading a panel of real validators happened to prefer.
 
 Each behavioural test deploys its own contract so the tests do not depend on
 each other or on an order. **Those deployments are disposable.** The

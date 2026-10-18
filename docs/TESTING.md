@@ -3,7 +3,7 @@
 | Gate | Command | Result |
 |---|---|---|
 | source invariants | `python scripts/preflight.py` | 167/167 |
-| Direct Mode | `pytest tests/direct -q` | 229 passed |
+| Direct Mode | `pytest tests/direct -q` | 233 passed |
 | GenVM lint and SDK validation | `genvm-lint lint contracts/claimcourt.py` then `genvm-lint check contracts/claimcourt.py` | lint passed (3 checks); validation passed, 29 methods (20 view, 9 write) |
 | mutation sweep | `python scripts/mutate.py` | <!-- SWEEP --> |
 
@@ -98,7 +98,7 @@ seeds it from whichever asset the release actually publishes.
 | `tests/direct/test_lifecycle.py` | 70 | registration and the policy hash over the whole definition, the definition and trigger admission matrices, URL and digest admission, ownership of versions and challenges, a new version not touching a submitted claim, revocation, challenge admission, the claim deadline, required evidence kinds, incident and evidence admission, duplicate detection, the evidence registry, pagination, truncation |
 | `tests/direct/test_verdicts.py` | 25 | every verdict, precedence, the parametric trigger met and not met and unreadable, fraud only where the policy asks and only with the words, retry to a settled reading, round exhaustion, unavailable and substituted and oversized and unreadable documents, the directed-text ceiling, terminal replay, cancellation, the receipt, staleness, revocation, counters moving once |
 | `tests/direct/test_hardening.py` | 50 | hostile panel output: unusable answers, wrong row counts, rows out of order, wrong types, bool-as-int, unknown findings, missing sections, fence and prose recovery, normalisation, invented quotes in both directions, quotes from the wrong document, ungrounded exclusions and contradictions, invented measurements, unknown fraud findings, and an answer to a question nobody asked |
-| `tests/direct/test_validators.py` | 68 | the contract's own validator closure, replayed through `direct_vm.run_validator` against forged leader results - and agreeing with honest ones, including a differently-labelled route to the same verdict |
+| `tests/direct/test_validators.py` | 72 | the contract's own validator closure, replayed through `direct_vm.run_validator` against forged leader results - and agreeing with honest ones, including a differently-labelled route to the same verdict, and the two coherent forgeries that only the verdict and the policy-failure reason can refuse |
 | `tests/direct/test_gate_units.py` | 16 | the gate rules the validator comparison reaches first, each staged so exactly one rule stands between the payload and acceptance |
 
 Nothing monkeypatches `resolve_submission`. The mocks sit on the document

@@ -226,10 +226,10 @@ arithmetic; and every reliance gate.
 Must match: the schema, the identifiers and bindings, both document
 digests, each document's status and reason, the missing-kinds list, the
 directed-text count, the panel state, the trigger state, the measurement,
-and **the verdict**.
+the four criteria, and **the verdict**.
 
-May differ: the label on an individual condition or exclusion, the four
-criteria where the verdict does not pin them, which grounded span was
+May differ: the label on an individual condition or exclusion, the fraud
+finding where it does not change the verdict, which grounded span was
 quoted, and the sentence of reasoning.
 
 In one line: **the facts must match, the outcome must match, and the
@@ -326,7 +326,7 @@ pin the policy hash a verdict was produced under.
 | Gate | Command | Result |
 |---|---|---|
 | source invariants | `python scripts/preflight.py` | 167/167 |
-| Direct Mode | `pytest tests/direct -q` | 229 passed, 0 failed, 0 skipped |
+| Direct Mode | `pytest tests/direct -q` | 233 passed, 0 failed, 0 skipped |
 | GenVM AST lint | `genvm-lint lint contracts/claimcourt.py` | passed, 3 checks |
 | GenVM SDK validation | `genvm-lint check contracts/claimcourt.py` | passed, 29 methods (20 view, 9 write) |
 | mutation sweep | `python scripts/mutate.py` | see [docs/TESTING.md](docs/TESTING.md) |
@@ -364,7 +364,7 @@ document, verdict and finding back off Studionet and rewrites
 
 ```text
 contracts/claimcourt.py              the one deployable contract
-tests/direct/                        229 tests, no network
+tests/direct/                        233 tests, no network
 tests/integration/                   hosted Studionet suite
 fixtures/                            synthetic policies, claims and records
 scripts/preflight.py                 source invariants, no dependencies

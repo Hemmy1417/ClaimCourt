@@ -14,7 +14,7 @@ import pytest
 from conftest import (CROP_DEFINITION, CROP_EVIDENCE, CROP_INCIDENT,
                       FRAUD_DEFINITION, HOLDING_STATEMENT, POLICY_CROP,
                       POLICY_PROPERTY, RAINFALL_RECORD, STORM_INVOICE,
-                      STORM_OBSERVATION, STORM_REPORT, quote_from)
+                      STORM_OBSERVATION, STORM_REPORT, doc_text, quote_from)
 
 
 STORM_EVENT = quote_from(STORM_REPORT, "On the night of 2 to 3 March 2026 a")
@@ -429,6 +429,103 @@ def test_a_coherent_but_untrue_adjudication_is_rejected(adjudicated):
     unsettled = _coherent(harness, unsettled)
     assert unsettled["verdict"] == "INCONCLUSIVE"
     assert _vote(harness, unsettled) is False
+
+
+def test_only_the_verdict_separates_two_otherwise_identical_readings(
+        harness):
+    """The narrowest case the comparison has to catch.
+
+    Every other coherent forgery in this file also moves one of the four
+    criteria, and the criteria are compared, so each of them would still be
+    refused if the verdict were not. The fraud question is the one route to
+    a different verdict that leaves all four criteria exactly as this node
+    found them: it is asked only where the policy asks it, it is not
+    compared directly, and every answer to it that changes anything changes
+    the verdict.
+
+    So this payload differs from what this node read in the verdict and in
+    nothing else that is compared. Only the verdict line can reject it.
+    """
+    policy_id = harness.register(FRAUD_DEFINITION)
+    claim_id = harness.open_challenge(policy_id)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
+    submission_id = harness.submit(claim_id)
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", STORM_EVENT, "E1"),
+         ("C2", "MET", STORM_NOTICE, "E1"),
+         ("C3", "MET", INVOICE_COST, "E2")],
+        [("X1", "NOT_EVIDENCED", "", ""), ("X2", "NOT_EVIDENCED", "", "")],
+        fraud={"finding": "NO_INDICATORS", "quote": "", "evidence_id": "",
+               "basis": "nothing in the papers suggests it"}))
+    assert harness.resolve(submission_id) == "COVERAGE_SUPPORTED"
+    payload = json.loads(harness.contract.get_receipt(submission_id, 1))
+    assert harness.vm.run_validator() is True
+
+    for finding, quote, evidence_id, verdict in [
+            ("INDICATORS_FOUND", INVOICE_ALT, "E2", "FRAUD_INDICATORS_FOUND"),
+            ("UNCLEAR", "", "", "INCONCLUSIVE")]:
+        forged = copy.deepcopy(payload)
+        forged["findings"]["fraud"].update(
+            {"finding": finding, "quote": quote, "evidence_id": evidence_id})
+        forged = _coherent(harness, forged)
+
+        # The forgery is coherent, so the gate lets it through, and it is
+        # identical to this node's reading on every compared fact.
+        assert forged["verdict"] == verdict
+        assert forged["criteria"] == payload["criteria"]
+        assert forged["policy_status"] == payload["policy_status"]
+        assert forged["panel_state"] == payload["panel_state"]
+        assert forged["trigger_state"] == payload["trigger_state"]
+        assert forged["directed_text_hits"] == payload["directed_text_hits"]
+        assert forged["rows"] == payload["rows"]
+        assert forged["findings"]["conditions"] \
+            == payload["findings"]["conditions"]
+        assert forged["findings"]["exclusions"] \
+            == payload["findings"]["exclusions"]
+
+        assert _vote(harness, forged) is False
+    assert policy_id == "pol-1"
+
+
+def test_nodes_must_agree_on_why_the_policy_could_not_be_read(ready):
+    """Two nodes that both failed to read the policy, for different stated
+    reasons, have not agreed.
+
+    Any change of `policy_status` also changes the verdict, so a forgery of
+    the status is refused by the verdict comparison whether or not the
+    status itself is compared. The reason within one status is the
+    narrowest case: same verdict, same criteria, same rows - and a consumer
+    reads the reason, so it has to match.
+    """
+    harness, _policy_id, claim_id = ready
+    # This node fetched the published policy and found bytes that are not
+    # the ones the version was registered against.
+    harness.clear()
+    harness.mock_doc(POLICY_PROPERTY,
+                     body=doc_text(POLICY_PROPERTY) + "\namended quietly\n")
+    harness.mock_docs(STORM_REPORT, STORM_INVOICE, STORM_OBSERVATION)
+    submission_id = harness.submit(claim_id)
+    assert harness.resolve(submission_id) == "EVIDENCE_UNAVAILABLE"
+    payload = json.loads(harness.contract.get_receipt(submission_id, 1))
+    assert payload["policy_status"] == "EVIDENCE_UNAVAILABLE"
+    assert payload["policy_reason"] == "HASH_MISMATCH"
+    assert harness.vm.run_validator() is True
+
+    for reason in ["FETCH_FAILED", "TOO_LARGE", "UNREADABLE"]:
+        forged = copy.deepcopy(payload)
+        forged["policy_reason"] = reason
+        forged = _coherent(harness, forged)
+
+        # Nothing else moved: the claim is still unreadable, by the same
+        # verdict, on the same criteria and the same documents.
+        assert forged["verdict"] == payload["verdict"]
+        assert forged["policy_status"] == payload["policy_status"]
+        assert forged["criteria"] == payload["criteria"]
+        assert forged["rows"] == payload["rows"]
+        assert forged["panel_state"] == payload["panel_state"]
+
+        assert _vote(harness, forged) is False
 
 
 def test_a_coherent_claim_that_the_documents_were_unreadable_is_rejected(

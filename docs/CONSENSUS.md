@@ -88,6 +88,7 @@ policy_hash, policy_version, policy_sha256, evidence_digest
 policy_status, policy_reason, missing_required_kinds
 directed_text_hits, panel_state, trigger_state
 verdict
+the four criteria
 per document: evidence_id, kind, status, reason, byte_count
 the measurement: value_found, value
 the order of the conditions and exclusions
@@ -101,19 +102,31 @@ disagreeing about anything that matters:
 
 ```text
 the label on an individual condition or exclusion
-the four criteria, where the verdict does not already pin them
 the fraud finding, where it does not change the verdict
 which grounded span was quoted, and from which document
 one sentence of reasoning per finding
 ```
 
-The criteria and the fraud finding are not compared directly because every
-answer to them that changes anything changes the verdict, which is
-compared. `INDICATORS_FOUND` produces `FRAUD_INDICATORS_FOUND` and
-`UNCLEAR` produces `INCONCLUSIVE`; a node that disagrees about the
-accusation disagrees about the outcome. Both are still derived in code from
+The fraud finding is the one judgement not compared directly, because
+every answer to it that changes anything changes the verdict, which is
+compared: `INDICATORS_FOUND` produces `FRAUD_INDICATORS_FOUND` and
+`UNCLEAR` produces `INCONCLUSIVE`, so a node that disagrees about the
+accusation disagrees about the outcome. It is still derived in code from
 each node's own findings, the gate refuses a payload whose criteria do not
 follow from its findings, and the ratified leader's are what gets stored.
+
+An earlier draft of this document said the four criteria were not compared
+either, on the same reasoning. That was wrong about the contract:
+`_first_difference` walks `CRITERIA_FIELDS` and compares all four. The
+mutation sweep is what caught the error - the mutation that drops the
+verdict from the comparison *survived*, because the criteria comparison was
+refusing every forged payload before the verdict line was ever reached.
+Closing it needed the one forgery that moves the verdict and leaves all
+four criteria untouched: a different answer to the fraud question
+(`test_only_the_verdict_separates_two_otherwise_identical_readings`). The
+same sweep found the matching gap for `policy_reason`, since any change of
+`policy_status` moves the verdict too
+(`test_nodes_must_agree_on_why_the_policy_could_not_be_read`).
 
 ### Why only the outcome is consensus-critical
 

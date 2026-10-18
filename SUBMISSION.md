@@ -55,11 +55,12 @@ before comparing.
 Validators must agree on the facts and the verdict: the identifiers and
 bindings, both document digests, each document's status and reason, the
 missing-kinds list, the directed-text count, the panel state, the
-measurement, the trigger state, and the verdict itself. They may differ on
-the label of an individual condition, on the criteria where the verdict does
-not pin them, on which grounded span was quoted, and on the reasoning. That
-is safe because the gate re-derives the outcome from the payload's own
-findings and refuses one that does not follow.
+measurement, the trigger state, the four criteria, and the verdict itself.
+They may differ on the label of an individual condition, on the fraud
+finding where it does not change the verdict, on which grounded span was
+quoted, and on the reasoning. That is safe because the gate re-derives the
+outcome from the payload's own findings and refuses one that does not
+follow.
 
 ## Deterministic responsibilities
 
@@ -97,12 +98,12 @@ money.
 | Gate | Result |
 |---|---|
 | source invariants (`scripts/preflight.py`) | 167/167 |
-| Direct Mode (`pytest tests/direct -q`) | 229 passed, 0 failed, 0 skipped |
+| Direct Mode (`pytest tests/direct -q`) | 233 passed, 0 failed, 0 skipped |
 | pickling checks | on, passing |
 | GenVM AST lint | passed, 3 checks |
 | GenVM SDK validation | passed, 29 methods (20 view, 9 write) |
 | mutation sweep (`scripts/mutate.py`) | <!-- SWEEP --> |
-| hosted integration | <!-- INTEGRATION --> |
+| hosted integration | 5 passed in 17 min 44 s on hosted Studionet |
 | CI (`.github/workflows/gates.yml`) | the offline gates on ubuntu, green |
 
 ## Live evidence
@@ -205,6 +206,6 @@ asks for an image.
 
 ## Portal description (under 1000 characters)
 
-ClaimCourt is a standalone GenLayer Intelligent Contract that adjudicates insurance claims. An insurer publishes a policy version - coverage conditions, exclusions, the evidence a claim must carry - frozen and hashed before any claim arrives. A claimant submits a claim binding that version and every document to the hash of its exact bytes. In one consensus round each validator fetches and hashes the documents itself and judges whether the evidence meets each condition, quoting the words it relies on; every quote is re-checked against the bytes that node verified. Deterministic code owns deadlines, required evidence, precedence, any parametric threshold and every reliance gate, and names the verdict: supported, not established, exclusion applies, fraud indicators, inconclusive or evidence unavailable. Evidence that instructs its reader cannot win coverage, and nothing moves money. Verified with 229 tests, a mutation sweep, a live suite and a FINALIZED deployment identical to source.
+ClaimCourt is a standalone GenLayer Intelligent Contract that adjudicates insurance claims. An insurer publishes a policy version - coverage conditions, exclusions, the evidence a claim must carry - frozen and hashed before any claim arrives. A claimant submits a claim binding that version and every document to the hash of its exact bytes. In one consensus round each validator fetches and hashes the documents itself and judges whether the evidence meets each condition, quoting the words it relies on; every quote is re-checked against the bytes that node verified. Deterministic code owns deadlines, required evidence, precedence, any parametric threshold and every reliance gate, and names the verdict: supported, not established, exclusion applies, fraud indicators, inconclusive or evidence unavailable. Evidence that instructs its reader cannot win coverage, and nothing moves money. Verified with 233 tests, a mutation sweep, a live suite and a FINALIZED deployment identical to source.
 
 (996 characters.)
