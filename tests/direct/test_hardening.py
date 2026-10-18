@@ -11,7 +11,7 @@ import pytest
 from conftest import (CROP_DEFINITION, CROP_EVIDENCE, CROP_INCIDENT,
                       FRAUD_DEFINITION, HOLDING_STATEMENT, POLICY_CROP,
                       POLICY_PROPERTY, RAINFALL_RECORD, STORM_INVOICE,
-                      STORM_REPORT, TODAY_DATE, quote_from)
+                      STORM_OBSERVATION, STORM_REPORT, TODAY_DATE, quote_from)
 
 
 STORM_EVENT = quote_from(STORM_REPORT, "On the night of 2 to 3 March 2026 a")
@@ -330,7 +330,8 @@ def test_a_wrongly_typed_trigger_value_fails_closed(harness, value):
 def test_an_unknown_fraud_finding_fails_closed(harness, finding):
     policy_id = harness.register(FRAUD_DEFINITION)
     claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     submission_id = harness.submit(claim_id)
     harness.mock_panel(harness.panel(
         [("C1", "MET", STORM_EVENT, "E1"),

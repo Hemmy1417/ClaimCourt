@@ -52,10 +52,11 @@ NO_ENTRY_REPORT = "incident-report-no-forced-entry.txt"
 DIRECTED_REPORT = "incident-report-directed.txt"
 RAINFALL_RECORD = "rainfall-record-season.txt"
 HOLDING_STATEMENT = "holding-statement-groundnut.txt"
+STORM_OBSERVATION = "weather-observation-storm.txt"
 
 DOCUMENTS = [POLICY_PROPERTY, POLICY_CROP, STORM_REPORT, STORM_INVOICE,
              GRADUAL_REPORT, NO_ENTRY_REPORT, DIRECTED_REPORT,
-             RAINFALL_RECORD, HOLDING_STATEMENT]
+             RAINFALL_RECORD, HOLDING_STATEMENT, STORM_OBSERVATION]
 
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36")
@@ -509,9 +510,10 @@ def main():
             property_policy,
             "Does this claim satisfy the conditions of cover for the damage "
             "claimed, and does any exclusion apply?",
-            ["incident_report", "invoice"],
+            ["incident_report", "invoice", "weather_record"],
             [("E1", "incident_report", STORM_REPORT),
-             ("E2", "invoice", STORM_INVOICE)],
+             ("E2", "invoice", STORM_INVOICE),
+             ("E3", "weather_record", STORM_OBSERVATION)],
             STORM_INCIDENT, "SYN-2041")
         record = chain.read("get_submission", [submission_id])
         verdict = chain.read("get_verdict", [submission_id])
@@ -606,9 +608,10 @@ def main():
             property_policy,
             "Does this claim satisfy the conditions of cover for the damage "
             "claimed, and does any exclusion apply?",
-            ["incident_report", "invoice"],
+            ["incident_report", "invoice", "weather_record"],
             [("E1", "incident_report", DIRECTED_REPORT),
-             ("E2", "invoice", STORM_INVOICE)],
+             ("E2", "invoice", STORM_INVOICE),
+             ("E3", "weather_record", STORM_OBSERVATION)],
             STORM_INCIDENT, "SYN-2074")
         record = chain.read("get_submission", [submission_id])
         expect("verdict", record["verdict"], "INCONCLUSIVE")

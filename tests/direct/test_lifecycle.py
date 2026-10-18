@@ -315,9 +315,9 @@ def test_a_submission_binds_the_version_and_every_document(harness):
     assert record["verdict"] == "PENDING"
     assert len(record["evidence_digest"]) == 64
     assert [item["evidence_id"] for item in record["evidence_refs"]] \
-        == ["E1", "E2"]
+        == ["E1", "E2", "E3"]
     assert [item["kind"] for item in record["evidence_refs"]] \
-        == ["incident_report", "invoice"]
+        == ["incident_report", "invoice", "weather_record"]
     assert record["evidence_refs"][0]["sha256"] == doc_sha(STORM_REPORT)
     assert harness.contract.list_submissions(claim_id, 0, 50) \
         == [submission_id]

@@ -1,0 +1,28 @@
+TEST / DEMONSTRATION ONLY - NOT FOR PRODUCTION
+Synthetic weather observation written to exercise an adjudication contract.
+The station, the figures and the publishing body are invented. These are not
+real meteorological observations and must not be used as such.
+
+SYNTHETIC METEOROLOGICAL SERVICE - PUBLISHED OBSERVATION RECORD
+Station: SYN-REF-11, synthetic estate reference station
+Issued: 6 March 2026
+
+Severe weather, night of 2 to 3 March 2026
+
+A deep low crossed the region overnight on 2 to 3 March 2026. At station
+SYN-REF-11, covering the synthetic trading estate, the following were
+recorded between 22:00 on 2 March and 06:00 on 3 March:
+
+  Maximum gust                      97 km/h at 02:40 on 3 March
+  Mean wind speed, hourly maximum   61 km/h
+  Rainfall over the period          38 millimetres
+  Lowest pressure                   974 hPa at 03:10 on 3 March
+
+A gust of 97 km/h is the highest recorded at this station since November
+2024. Damage to roof coverings was reported across the district during the
+same period.
+
+Notes
+Observations are published once the period has closed and are not revised
+afterwards. This record covers the station named above and the period
+stated; it says nothing about any particular property.

@@ -14,7 +14,7 @@ import pytest
 from conftest import (CROP_DEFINITION, CROP_EVIDENCE, CROP_INCIDENT,
                       FRAUD_DEFINITION, HOLDING_STATEMENT, POLICY_CROP,
                       POLICY_PROPERTY, RAINFALL_RECORD, STORM_INVOICE,
-                      STORM_REPORT, quote_from)
+                      STORM_OBSERVATION, STORM_REPORT, quote_from)
 
 
 STORM_EVENT = quote_from(STORM_REPORT, "On the night of 2 to 3 March 2026 a")
@@ -290,7 +290,8 @@ def test_claiming_a_document_is_unavailable_when_it_can_be_read(harness):
     payload = json.loads(harness.contract.get_receipt(submission_id, 1))
     assert harness.vm.run_validator() is True
     harness.clear()
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     harness.mock_panel(_panel(harness))
     assert _vote(harness, payload) is False
 
@@ -326,7 +327,8 @@ def test_a_forged_trigger_measurement_is_rejected(harness):
 def test_a_forged_fraud_finding_is_rejected(harness):
     policy_id = harness.register(FRAUD_DEFINITION)
     claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     submission_id = harness.submit(claim_id)
     harness.mock_panel(harness.panel(
         [("C1", "MET", STORM_EVENT, "E1"),
@@ -352,7 +354,8 @@ def test_a_transient_leader_failure_is_agreed_with_only_when_shared(
         adjudicated):
     harness, _submission_id, _payload = adjudicated
     harness.clear()
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     # No panel is reachable for this node either.
     assert harness.vm.run_validator(
         leader_error=Exception("[TRANSIENT] the model call failed")) is True
@@ -367,7 +370,8 @@ def test_a_transient_claim_is_rejected_when_this_node_succeeds(adjudicated):
 def test_a_panel_failure_is_never_agreed_with(adjudicated):
     harness, _submission_id, _payload = adjudicated
     harness.clear()
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     assert harness.vm.run_validator(
         leader_error=Exception("[PANEL] the ratified payload failed the "
                                "gate")) is False

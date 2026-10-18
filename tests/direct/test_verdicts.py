@@ -9,9 +9,9 @@ from conftest import (CROP_DEFINITION, CROP_EVIDENCE, CROP_INCIDENT,
                       DIRECTED_EVIDENCE, DIRECTED_REPORT, FRAUD_DEFINITION,
                       GRADUAL_EVIDENCE, GRADUAL_REPORT, HOLDING_STATEMENT,
                       NO_ENTRY_REPORT, POLICY_CROP, POLICY_PROPERTY,
-                      RAINFALL_RECORD, STORM_INVOICE, STORM_REPORT,
-                      THEFT_DEFINITION, THEFT_EVIDENCE, THEFT_INCIDENT,
-                      TODAY_DATE, quote_from)
+                      RAINFALL_RECORD, STORM_INVOICE, STORM_OBSERVATION,
+                      STORM_REPORT, THEFT_DEFINITION, THEFT_EVIDENCE,
+                      THEFT_INCIDENT, TODAY_DATE, quote_from)
 
 
 STORM_EVENT = quote_from(STORM_REPORT, "On the night of 2 to 3 March 2026 a")
@@ -70,7 +70,7 @@ def test_a_claim_that_meets_every_condition_is_supported(ready):
         "required_conditions_met": True,
         "exclusion_evidence_found": False,
     }
-    assert verdict["evidence_refs"] == ["E1", "E2"]
+    assert verdict["evidence_refs"] == ["E1", "E2", "E3"]
     assert verdict["bounded_reason"] == ""
     assert verdict["policy_hash"] == harness.contract.get_policy_hash(claim_id)
 
@@ -119,8 +119,8 @@ def test_an_evidenced_exclusion_outranks_the_conditions(harness):
     policy_id = harness.register()
     claim_id = harness.open_challenge(
         policy_id, required=["incident_report", "invoice"])
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE,
-                      GRADUAL_REPORT)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, GRADUAL_REPORT)
     submission_id = harness.submit(claim_id, evidence=GRADUAL_EVIDENCE)
     harness.mock_panel(harness.panel(
         _all_met(),
@@ -161,7 +161,8 @@ def test_an_unclear_condition_is_inconclusive_and_retryable(ready):
     assert harness.contract.policy_record(policy_id, 1)["total"] == 0
 
     harness.clear()
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
     harness.vm.sender = harness.stranger
     assert harness.contract.retry_submission(
@@ -177,9 +178,10 @@ def test_an_unclear_condition_is_inconclusive_and_retryable(ready):
 
 def test_contradictory_evidence_is_inconclusive(harness):
     policy_id = harness.register()
-    claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE,
-                      GRADUAL_REPORT)
+    claim_id = harness.open_challenge(
+        policy_id, required=["incident_report", "invoice"])
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, GRADUAL_REPORT)
     submission_id = harness.submit(claim_id, evidence=GRADUAL_EVIDENCE)
     harness.mock_panel(harness.panel(
         _all_met(), _no_exclusions(), contradiction=True,
@@ -226,7 +228,8 @@ def test_a_missing_required_kind_is_never_adjudicated(harness):
                                                   TODAY_DATE) is False
 
     harness.clear()
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
     harness.vm.sender = harness.stranger
     assert harness.contract.retry_submission(
@@ -263,7 +266,8 @@ def test_an_unreadable_policy_is_never_a_finding(ready):
 def test_evidence_that_addresses_its_reader_cannot_win_coverage(harness):
     policy_id = harness.register()
     claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, DIRECTED_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, DIRECTED_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     submission_id = harness.submit(claim_id, evidence=DIRECTED_EVIDENCE,
                                    reference="SYN-2074")
     harness.mock_panel(harness.panel(
@@ -363,7 +367,8 @@ def test_fraud_is_only_found_where_the_policy_asks_and_the_words_are_there(
         harness):
     policy_id = harness.register(FRAUD_DEFINITION)
     claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     submission_id = harness.submit(claim_id)
     harness.mock_panel(harness.panel(
         _all_met(), _no_exclusions(),
@@ -380,7 +385,8 @@ def test_fraud_is_only_found_where_the_policy_asks_and_the_words_are_there(
 def test_an_accusation_without_the_words_does_not_stand(harness):
     policy_id = harness.register(FRAUD_DEFINITION)
     claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     submission_id = harness.submit(claim_id)
     harness.mock_panel(harness.panel(
         _all_met(), _no_exclusions(),
@@ -493,7 +499,8 @@ def test_a_verdict_goes_stale_after_its_window(harness):
     definition["review_window_days"] = 2
     policy_id = harness.register(definition)
     claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     submission_id = harness.submit(claim_id)
     harness.mock_panel(harness.panel(_all_met(), _no_exclusions()))
     harness.resolve(submission_id)

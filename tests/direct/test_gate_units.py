@@ -122,11 +122,12 @@ def test_an_accusation_without_its_words_is_refused(harness):
     import sys
 
     from conftest import (FRAUD_DEFINITION, POLICY_PROPERTY, STORM_INVOICE,
-                          STORM_REPORT)
+                      STORM_OBSERVATION, STORM_REPORT)
 
     policy_id = harness.register(FRAUD_DEFINITION)
     claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT,
+                      STORM_INVOICE, STORM_OBSERVATION)
     submission_id = harness.submit(claim_id)
     harness.mock_panel(harness.panel(
         [("C1", "MET", STORM_EVENT, "E1"),
@@ -229,14 +230,17 @@ def test_a_panel_state_that_contradicts_the_record_is_refused(module,
     unreadable["policy_status"] = "EVIDENCE_UNAVAILABLE"
     unreadable["policy_reason"] = "FETCH_FAILED"
     assert unreadable["panel_state"] == "ASSESSED"
-    assert module._parse_payload(unreadable, context, None, None) is None
+    assert module._parse_payload(_restate(module, context, unreadable),
+                                 context, None, None) is None
 
     missing = copy.deepcopy(payload)
     missing["rows"][1]["status"] = "EVIDENCE_UNAVAILABLE"
     missing["rows"][1]["reason"] = "FETCH_FAILED"
     missing["rows"][1]["byte_count"] = 0
+    missing["missing_required_kinds"] = ["invoice"]
     # The invoice is a required kind, so the panel could not have run.
-    assert module._parse_payload(missing, context, None, None) is None
+    assert module._parse_payload(_restate(module, context, missing),
+                                 context, None, None) is None
 
 
 def test_a_status_without_its_reason_is_refused(module, adjudicated):
@@ -297,6 +301,53 @@ def test_a_trigger_state_that_does_not_follow_is_refused(module,
         forged = copy.deepcopy(payload)
         forged["trigger_state"] = state
         assert module._parse_payload(forged, context, None, None) is None
+
+
+def test_a_trigger_state_must_follow_the_measurement(harness):
+    """On a policy that does declare a trigger, the state must be the one
+    the comparison produces. Staged here because a policy without a trigger
+    refuses any state but NOT_DECLARED for a different reason."""
+    import sys
+
+    from conftest import (CROP_DEFINITION, CROP_EVIDENCE, CROP_INCIDENT,
+                          HOLDING_STATEMENT, POLICY_CROP, RAINFALL_RECORD,
+                          quote_from)
+
+    rainfall = quote_from(RAINFALL_RECORD, "Cumulative rainfall recorded: 486")
+    holding = quote_from(HOLDING_STATEMENT, "This claim is made for the")
+    policy_id = harness.register(CROP_DEFINITION, policy=POLICY_CROP,
+                                 coverage_type="parametric drought")
+    claim_id = harness.open_challenge(
+        policy_id, required=["holding_statement", "weather_record"])
+    harness.mock_docs(POLICY_CROP, HOLDING_STATEMENT, RAINFALL_RECORD)
+    submission_id = harness.submit(claim_id, evidence=CROP_EVIDENCE,
+                                   incident=CROP_INCIDENT,
+                                   reference="SYN-3017")
+    harness.mock_panel(harness.panel(
+        [("C1", "MET", holding, "E1"), ("C2", "MET", rainfall, "E2")],
+        [("X1", "NOT_EVIDENCED", "", "")],
+        trigger={"value_found": True, "value": 486, "quote": rainfall,
+                 "evidence_id": "E2"}))
+    # 486 millimetres against a threshold of at most 220.
+    assert harness.resolve(submission_id) == "COVERAGE_NOT_ESTABLISHED"
+
+    module = sys.modules[type(harness.contract).__module__]
+    record = harness.contract.submissions.get(submission_id)
+    context = harness.contract._context(record)
+    context["round"] = int(record.rounds_used)
+    payload = json.loads(harness.contract.get_receipt(submission_id, 1))
+    assert payload["trigger_state"] == "NOT_MET"
+    assert module._parse_payload(payload, context, None, None) is not None
+
+    # The same measurement, relabelled as a trigger that fired.
+    forged = copy.deepcopy(payload)
+    forged["trigger_state"] = "MET"
+    assert module._parse_payload(_restate(module, context, forged),
+                                 context, None, None) is None
+    forged = copy.deepcopy(payload)
+    forged["trigger_state"] = "UNREADABLE"
+    assert module._parse_payload(_restate(module, context, forged),
+                                 context, None, None) is None
 
 
 def test_an_outcome_that_does_not_follow_from_the_findings_is_refused(

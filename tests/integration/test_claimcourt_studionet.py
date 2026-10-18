@@ -43,6 +43,7 @@ STORM_REPORT = "incident-report-storm.txt"
 STORM_INVOICE = "repair-invoice-storm.txt"
 NO_ENTRY_REPORT = "incident-report-no-forced-entry.txt"
 DIRECTED_REPORT = "incident-report-directed.txt"
+STORM_OBSERVATION = "weather-observation-storm.txt"
 MISSING = "document-that-does-not-exist.txt"
 
 DEADLINE = "2027-06-30"
@@ -220,11 +221,13 @@ def test_a_claim_that_satisfies_its_policy(contract):
         contract, policy_id,
         "Does this claim satisfy the conditions of cover for the damage "
         "claimed, and does any exclusion apply?",
-        ["incident_report", "invoice"])
+        ["incident_report", "invoice", "weather_record"])
     submission_id = _submit(
         contract, claim_id,
         [("E1", "incident_report", STORM_REPORT),
-         ("E2", "invoice", STORM_INVOICE)], STORM_INCIDENT, "SYN-2041")
+         ("E2", "invoice", STORM_INVOICE),
+         ("E3", "weather_record", STORM_OBSERVATION)],
+        STORM_INCIDENT, "SYN-2041")
 
     receipt = contract.resolve_submission(args=[submission_id]).transact(
         **WAIT)
@@ -296,11 +299,13 @@ def test_evidence_that_addresses_its_reader_cannot_win_coverage(contract):
         contract, policy_id,
         "Does this claim satisfy the conditions of cover for the damage "
         "claimed, and does any exclusion apply?",
-        ["incident_report", "invoice"])
+        ["incident_report", "invoice", "weather_record"])
     submission_id = _submit(
         contract, claim_id,
         [("E1", "incident_report", DIRECTED_REPORT),
-         ("E2", "invoice", STORM_INVOICE)], STORM_INCIDENT, "SYN-2074")
+         ("E2", "invoice", STORM_INVOICE),
+         ("E3", "weather_record", STORM_OBSERVATION)],
+        STORM_INCIDENT, "SYN-2074")
 
     receipt = contract.resolve_submission(args=[submission_id]).transact(
         **WAIT)

@@ -94,6 +94,7 @@ GRADUAL_REPORT = "assessor-report-gradual.txt"
 NO_ENTRY_REPORT = "incident-report-no-forced-entry.txt"
 DIRECTED_REPORT = "incident-report-directed.txt"
 RAINFALL_RECORD = "rainfall-record-season.txt"
+STORM_OBSERVATION = "weather-observation-storm.txt"
 HOLDING_STATEMENT = "holding-statement-groundnut.txt"
 
 TODAY = "2026-10-17T09:30:00.000+00:00"
@@ -212,9 +213,12 @@ FRAUD_DEFINITION["fraud_question"] = (
     "an invoice was altered after it was issued?")
 
 
+# A covered event is not established by the claimant's own account of it,
+# so the storm claim carries the published observation for that night.
 STORM_EVIDENCE = [
     {"evidence_id": "E1", "kind": "incident_report", "name": STORM_REPORT},
     {"evidence_id": "E2", "kind": "invoice", "name": STORM_INVOICE},
+    {"evidence_id": "E3", "kind": "weather_record", "name": STORM_OBSERVATION},
 ]
 GRADUAL_EVIDENCE = [
     {"evidence_id": "E1", "kind": "incident_report", "name": STORM_REPORT},
@@ -232,6 +236,7 @@ CROP_EVIDENCE = [
 DIRECTED_EVIDENCE = [
     {"evidence_id": "E1", "kind": "incident_report", "name": DIRECTED_REPORT},
     {"evidence_id": "E2", "kind": "invoice", "name": STORM_INVOICE},
+    {"evidence_id": "E3", "kind": "weather_record", "name": STORM_OBSERVATION},
 ]
 
 STORM_INCIDENT = {
@@ -339,7 +344,8 @@ class Harness:
             question or "Does this claim satisfy the conditions of cover for "
                         "the damage claimed, and does any exclusion apply?",
             json.dumps(required if required is not None
-                       else ["incident_report", "invoice"]),
+                       else ["incident_report", "invoice",
+                             "weather_record"]),
             deadline)
 
     def submit(self, claim_id, evidence=None, incident=None,
@@ -397,5 +403,6 @@ def ready(harness):
     reachable: the state most adjudication tests start from."""
     policy_id = harness.register()
     claim_id = harness.open_challenge(policy_id)
-    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE)
+    harness.mock_docs(POLICY_PROPERTY, STORM_REPORT, STORM_INVOICE,
+                      STORM_OBSERVATION)
     return harness, policy_id, claim_id

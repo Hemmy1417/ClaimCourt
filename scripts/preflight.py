@@ -57,7 +57,8 @@ FIXTURE_FILES = ["policy-property-v1.txt", "policy-crop-parametric-v1.txt",
                  "incident-report-no-forced-entry.txt",
                  "incident-report-directed.txt",
                  "rainfall-record-season.txt",
-                 "holding-statement-groundnut.txt"]
+                 "holding-statement-groundnut.txt",
+                 "weather-observation-storm.txt"]
 
 SECRET_HINTS = ["private_key", "privatekey", "mnemonic", "seed phrase",
                 "BEGIN RSA", "gh_token", "github_token", "api_key"]
