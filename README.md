@@ -329,10 +329,11 @@ pin the policy hash a verdict was produced under.
 | Direct Mode | `pytest tests/direct -q` | 233 passed, 0 failed, 0 skipped |
 | GenVM AST lint | `genvm-lint lint contracts/claimcourt.py` | passed, 3 checks |
 | GenVM SDK validation | `genvm-lint check contracts/claimcourt.py` | passed, 29 methods (20 view, 9 write) |
-| mutation sweep | `python scripts/mutate.py` | see [docs/TESTING.md](docs/TESTING.md) |
-| hosted integration | `CLAIMCOURT_FIXTURE_REF=4a6fcc9 gltest tests/integration -v -s --network studionet` | see [docs/TESTING.md](docs/TESTING.md) |
+| mutation sweep | `python scripts/mutate.py` | 43/43 killed, 0 survived |
+| hosted integration | `CLAIMCOURT_FIXTURE_REF=4a6fcc9 gltest tests/integration -v -s --network studionet` | 5 passed in 17 min 44 s, [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | live evidence, re-read | `python scripts/verify.py` | all checks passed; read-only, no keys |
-| CI, every push | `.github/workflows/gates.yml` | the offline gates on ubuntu |
+| CI, every push | `.github/workflows/gates.yml` | the offline gates on ubuntu, green |
+| clean clone, fresh venv | [docs/TESTING.md](docs/TESTING.md) | 167/167, 233 passed, lint green, `live.md` reproduced byte-identical |
 
 ## Reviewer fast path
 
