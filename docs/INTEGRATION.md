@@ -15,73 +15,103 @@ from genlayer import *
 @gl.contract_interface
 class IClaimCourt:
     class View:
-        def is_denial_supported(self, review_id: str, as_of: str) -> bool: ...
-        def is_denial_unsupported(self, review_id: str,
+        def is_coverage_supported(self, submission_id: str,
                                   as_of: str) -> bool: ...
-        def review_outcome(self, review_id: str, as_of: str) -> dict: ...
+        def claim_outcome(self, submission_id: str, as_of: str) -> dict: ...
+        def get_verdict(self, submission_id: str) -> dict: ...
 
     class Write:
         pass
 
 
-COURT = Address("0x78188E7554564606401b7f3B368076D08e0ef63E")  # Studionet
+COURT = Address("0x0000000000000000000000000000000000000000")  # see README
 
 
-class DisputedAmountHold(gl.Contract):
-    """Releases a held amount only when the refusal that caused the hold was
-    reviewed and did not stand."""
-
-    def _review(self, review_id: str, as_of: str) -> dict:
-        return IClaimCourt(COURT).view().review_outcome(review_id, as_of)
+class ClaimSettlement(gl.Contract):
+    """Releases a held amount only when the claim it was held for was
+    adjudicated as covered."""
 
     @gl.public.write
-    def release(self, review_id: str, as_of: str) -> None:
-        outcome = self._review(review_id, as_of)
+    def release(self, submission_id: str, as_of: str) -> None:
+        outcome = IClaimCourt(COURT).view().claim_outcome(submission_id,
+                                                          as_of)
         if not outcome["consumable"]:
             raise gl.vm.UserError(
-                "EXPECTED: that review is not settled, is stale, or its "
-                "clause version was withdrawn")
-        if not outcome["denial_unsupported"]:
+                "EXPECTED: that claim is not settled, is stale, or its "
+                "policy version was withdrawn")
+        if not outcome["coverage_supported"]:
             raise gl.vm.UserError(
-                "EXPECTED: the refusal was not found unsupported")
+                "EXPECTED: the claim was not adjudicated as covered")
         # ... release
 ```
 
 The one-line version, for a gate that only needs a yes:
 
 ```python
-if not IClaimCourt(COURT).view().is_denial_supported(review_id, as_of):
-    raise gl.vm.UserError("EXPECTED: the refusal has not been upheld")
+if not IClaimCourt(COURT).view().is_coverage_supported(submission_id, as_of):
+    raise gl.vm.UserError("EXPECTED: coverage is not supported")
 ```
+
+**A verdict is not an instruction to pay.** `COVERAGE_SUPPORTED` says the
+conditions were met on the documents reviewed. Authorisation, limits,
+finality and the insurer's own rules are the consumer's business, not this
+contract's.
 
 ## `as_of`
 
 Every reliance view takes `as_of`, an ISO `yyyy-mm-dd` date. A view cannot
 read a transaction clock, so the consumer supplies the date it is deciding
-on. Pass the date of your own transaction. A date before the review was
+on. Pass the date of your own transaction. A date before the claim was
 settled, or anything that is not a date, reads as `UNKNOWN` and therefore
 not consumable - never as fresh.
 
-## What `review_outcome` returns
+## What `claim_outcome` returns
 
 ```json
 {
-  "review_id": "rv-1",
-  "clause_set_id": "cs-1",
-  "version": 1,
-  "definition_hash": "73fe67...",
+  "submission_id": "sub-1",
+  "claim_id": "clm-1",
+  "policy_id": "pol-1",
+  "policy_version": 1,
+  "policy_hash": "139d41...",
   "is_current_version": true,
   "status": "RESOLVED",
-  "verdict": "DENIAL_UNSUPPORTED",
-  "grounds_total": 1,
-  "grounds_supported": 0,
-  "grounds_failing": 1,
+  "verdict": "COVERAGE_SUPPORTED",
+  "evidence_status": "EVIDENCE_SUFFICIENT",
+  "conditions_met": 3,
+  "conditions_not_met": 0,
+  "conditions_unclear": 0,
+  "trigger_state": "NOT_DECLARED",
+  "fraud_finding": "NOT_ASKED",
   "directed_text_hits": 0,
   "rounds_used": 1,
   "freshness": "RELIABLE",
   "consumable": true,
-  "denial_supported": false,
-  "denial_unsupported": true
+  "coverage_supported": true
+}
+```
+
+`get_verdict(submission_id)` is the structured adjudication result the brief
+describes, including the four criteria:
+
+```json
+{
+  "verdict": "COVERAGE_SUPPORTED",
+  "coverage_conditions_met": true,
+  "exclusion_applies": false,
+  "evidence_status": "EVIDENCE_SUFFICIENT",
+  "criteria": {
+    "policy_version_verified": true,
+    "covered_event_supported": true,
+    "required_conditions_met": true,
+    "exclusion_evidence_found": false
+  },
+  "evidence_refs": ["E1", "E2"],
+  "bounded_reason": "",
+  "policy_version": 1,
+  "policy_hash": "139d41...",
+  "trigger_state": "NOT_DECLARED",
+  "fraud_finding": "NOT_ASKED"
 }
 ```
 
@@ -89,50 +119,47 @@ not consumable - never as fresh.
 
 | Verdict | What a consumer should conclude |
 |---|---|
-| `DENIAL_SUPPORTED` | every stated ground stands up against the clause it cites, as written |
-| `DENIAL_UNSUPPORTED` | at least one ground is not reached by the clause it cites |
-| `DENIAL_OVERBROAD` | the clause does reach the ground, but the notice applies it wider than the clause's own scope. Both convenience booleans are false: decide deliberately |
-| `CLAUSE_MISCITED` | a cited clause is not in the bound version of the wording |
-| `GROUNDS_MISSTATED` | the notice does not state a ground the review asserted. This is the opener's error, not the decider's |
+| `COVERAGE_SUPPORTED` | every coverage condition was met on this evidence, no exclusion was evidenced, and any declared trigger fired |
+| `COVERAGE_NOT_ESTABLISHED` | a condition was positively not met, or a declared trigger did not fire. Not a finding that the claim is false |
+| `EXCLUSION_APPLIES` | an exclusion was evidenced, with the words it rests on stored alongside |
+| `FRAUD_INDICATORS_FOUND` | the policy asked a bounded fraud question and the documents answer it, with a quote. Indicators, not a determination |
 | `INCONCLUSIVE` | read, not settled. Never act on it |
-| `RECORD_UNAVAILABLE` | a bound document could not be examined. Never act on it |
-| `WITHDRAWN` | the opener took the review back before it settled |
-| `PENDING` | not yet read |
+| `EVIDENCE_UNAVAILABLE` | the policy document or a required kind could not be examined. Never act on it |
+| `CANCELLED` | the claimant withdrew the claim before it settled |
+| `PENDING` | not yet adjudicated |
 
-The three verdicts a gate should treat as "no answer" - `INCONCLUSIVE`,
-`RECORD_UNAVAILABLE`, `WITHDRAWN` - are kept apart on purpose, and
-`consumable` is false for all of them, so a consumer that only checks
-`consumable` is already safe.
+`INCONCLUSIVE`, `EVIDENCE_UNAVAILABLE`, `CANCELLED` and `PENDING` are all
+non-consumable, so a consumer that only checks `consumable` is already safe.
 
-### Checking the rule the verdict was read against
+### Checking the policy a verdict was read against
 
-A consumer that expects a particular wording should pin it:
+A consumer that expects particular terms should pin them:
 
 ```python
-outcome = IClaimCourt(COURT).view().review_outcome(review_id, as_of)
-if outcome["definition_hash"] != EXPECTED_DEFINITION_HASH:
-    raise gl.vm.UserError("EXPECTED: reviewed against a different wording")
+outcome = IClaimCourt(COURT).view().claim_outcome(submission_id, as_of)
+if outcome["policy_hash"] != EXPECTED_POLICY_HASH:
+    raise gl.vm.UserError("EXPECTED: adjudicated under different terms")
 ```
 
-`definition_hash` covers the clause set id, the owner, the label, the
-version number, the document location and the document digest. A new
-version never changes an existing review's hash, so this check answers
-exactly one question: *was this verdict produced against the wording I
-expected?* `is_current_version` tells you whether a newer version exists.
+`policy_hash` covers the policy id, the owner, the version number, the
+wording document's location and digest, every coverage condition, every
+exclusion, the fraud question, the trigger and the freshness window. A new
+version never changes an existing claim's hash, so this check answers
+exactly one question: *was this verdict produced under the terms I expected?*
+`is_current_version` tells you whether a newer version exists.
 
 ## The accumulating record
 
 ```python
-record = IClaimCourt(COURT).view().clause_record(clause_set_id, version,
-                                                 "Clause 4.2")
-# {"total": 7, "SUPPORTED": 2, "UNSUPPORTED": 4, "OVERBROAD": 1,
-#  "CLAUSE_ABSENT": 0, "NOT_IN_NOTICE": 0, "UNDECIDED": 0, ...}
+record = IClaimCourt(COURT).view().policy_record(policy_id, version)
+# {"total": 9, "COVERAGE_SUPPORTED": 4, "COVERAGE_NOT_ESTABLISHED": 2,
+#  "EXCLUSION_APPLIES": 1, "FRAUD_INDICATORS_FOUND": 0,
+#  "INCONCLUSIVE": 2, "EVIDENCE_UNAVAILABLE": 0, ...}
 ```
 
-Counters move only when a review settles, and only once per review. A
-clause whose refusals keep failing review is visible without reading a
-single case. `clause_set_record(clause_set_id, version)` gives the same
-picture one level up, counted by verdict.
+Counters move only when a claim settles, and only once per claim. How often
+a policy version's claims end up unsettled is as useful a signal as how
+often they are paid.
 
 ## The full surface
 
@@ -140,63 +167,97 @@ picture one level up, counted by verdict.
 
 | Method | Who | Effect |
 |---|---|---|
-| `register_clause_set(label, policy_url, policy_sha256, review_window_days)` | anyone; the caller becomes owner | publishes version 1 and returns the clause set id. `0` days means the 365-day default |
-| `publish_clause_version(clause_set_id, policy_url, policy_sha256)` | owner | a new version, with its own definition hash. Returns the version number |
-| `revoke_clause_version(clause_set_id, version)` | owner | that version's reviews become `BLOCKED` and not consumable |
-| `open_review(clause_set_id, notice_url, notice_sha256, claim_reference, clause_refs, ground_texts)` | anyone | binds the active version and both documents. Returns the review id |
-| `resolve_review(review_id)` | anyone | one consensus round. Returns the verdict |
-| `retry_review(review_id)` | anyone | re-reads the same bound documents, while rounds remain |
-| `withdraw_review(review_id)` | the opener | only before settlement; releases the notice digest |
-| `supersede_review(prior_review_id, notice_url, notice_sha256, clause_refs, ground_texts)` | anyone | reviews a re-issued notice, with lineage both ways. The prior review is never rewritten |
+| `register_policy(policy_url, policy_sha256, coverage_type, definition_json)` | anyone; the caller becomes owner | publishes version 1 with its conditions, exclusions, optional fraud question and optional trigger. Returns the policy id |
+| `publish_policy_version(policy_id, policy_url, policy_sha256, definition_json)` | the owner | a new version with its own policy hash; submitted claims keep theirs |
+| `revoke_policy_version(policy_id, version)` | the owner | that version's claims stop being consumable, keeping their verdicts |
+| `open_claim_challenge(policy_id, decision_question, required_evidence_json, claim_deadline)` | the owner | the bounded question, the kinds of evidence a claim must carry, and the deadline. Returns the claim id |
+| `cancel_claim_challenge(claim_id)` | the owner | closes it to new submissions |
+| `submit_claim(claim_id, claimant_reference, incident_json, evidence_json)` | anyone | binds the policy version, its hash and every document by sha256. Returns the submission id |
+| `resolve_submission(submission_id)` | anyone | one consensus round. Returns the verdict |
+| `retry_submission(submission_id)` | anyone | re-reads the same bound documents, while rounds remain |
+| `cancel_submission(submission_id)` | the claimant | only before settlement |
+
+### The policy definition
+
+`definition_json` is strict, and anything malformed is refused at
+registration rather than at adjudication:
+
+```json
+{
+  "coverage_conditions": [
+    {"ref": "C1", "covered_event": true, "text": "..."},
+    {"ref": "C2", "text": "..."}
+  ],
+  "exclusions": [{"ref": "X1", "text": "..."}],
+  "fraud_question": "",
+  "review_window_days": 365,
+  "trigger": {
+    "measure": "cumulative rainfall at the named station",
+    "unit": "millimetres",
+    "rule": "AT_MOST",
+    "threshold": 220,
+    "window_start": "2026-06-01",
+    "window_end": "2026-09-30"
+  }
+}
+```
+
+`covered_event` marks the conditions that decide whether a covered event
+happened at all, which is what `covered_event_supported` reports. `trigger`
+and `fraud_question` are optional; omit them and the contract will refuse
+any answer to them.
 
 ### Views
 
-`get_config`, `get_clause_set`, `clause_set_head`, `definition_hash`,
-`get_review`, `get_grounds`, `get_receipt`, `review_verdict`,
-`review_status`, `freshness`, `is_fresh`, `is_consumable`,
-`is_denial_supported`, `is_denial_unsupported`, `review_outcome`,
-`clause_record`, `clause_set_record`, `list_reviews`, `notice_under_review`,
+`get_config`, `get_policy`, `get_claim`, `get_claim_status`,
+`get_policy_hash`, `get_policy_version`, `get_submission`, `get_verdict`,
+`get_evidence_status`, `get_findings`, `get_receipt`,
+`is_coverage_supported`, `freshness`, `is_fresh`, `is_consumable`,
+`claim_outcome`, `policy_record`, `list_submissions`, `evidence_first_seen`,
 `get_stats`.
 
-`get_receipt(review_id, round)` returns the ratified payload of that round
-as JSON: the document statuses, the marker count, the panel state, the
-triage bits and every grounded row. That is the audit trail - what the
-validators actually agreed on, not a summary of it.
+`get_receipt(submission_id, round)` returns the ratified payload of that
+round as JSON: the document rows, the marker count, the panel state, every
+grounded finding, the measurement, the criteria and the verdict. That is the
+audit trail - what the validators agreed on, not a summary of it.
 
-`list_reviews(clause_set_id, version, offset, limit)` pages, with a limit
-capped at 50.
+`evidence_first_seen(sha256)` names the submission that first committed a
+document with those bytes. A document reused across claims is a fact a
+reviewer may want; it is never on its own a finding.
 
 ## Lifecycle
 
-```
-                     open_review / supersede_review
-                                  |
-                                  v
-                                 OPEN
-                                  |
-                          resolve_review
-                                  |
-        +-------------------------+--------------------------+
-        |                         |                          |
-   RESOLVED                   RETRYABLE                  WITHDRAWN
- DENIAL_SUPPORTED           INCONCLUSIVE               (withdraw_review,
- DENIAL_UNSUPPORTED         RECORD_UNAVAILABLE          before settlement)
- DENIAL_OVERBROAD                 |
- CLAUSE_MISCITED           retry_review (up to 3 rounds
- GROUNDS_MISSTATED          in total, then RESOLVED
-        |                   with the unsettled verdict)
-        |
- supersede_review -> a new review against a re-issued notice
+```text
+          register_policy ──> publish_policy_version ──> revoke_policy_version
+                 │
+          open_claim_challenge ──> cancel_claim_challenge
+                 │
+            submit_claim
+                 │
+                 v
+              PENDING
+                 │
+         resolve_submission
+                 │
+     ┌───────────┼────────────────┐
+     │           │                │
+ RESOLVED    RETRYABLE        CANCELLED
+ COVERAGE_SUPPORTED        INCONCLUSIVE      (cancel_submission,
+ COVERAGE_NOT_ESTABLISHED  EVIDENCE_         before settlement)
+ EXCLUSION_APPLIES         UNAVAILABLE
+ FRAUD_INDICATORS_FOUND         │
+                          retry_submission, 3 rounds in total,
+                          then RESOLVED with the unsettled verdict
 ```
 
 ## What a consumer must not do
 
-- do not read `review_verdict` without `is_consumable` or
-  `review_outcome`: a verdict alone says nothing about staleness or
-  whether the wording was withdrawn;
-- do not treat `DENIAL_UNSUPPORTED` as an instruction to pay a claim. It
-  says a reason did not stand, not that the claim is good;
-- do not treat `grounds_failing > 0` as the verdict. The precedence rules
-  are in the contract, and `verdict` is their output;
+- do not read `verdict` without `consumable`: a verdict alone says nothing
+  about staleness or whether the policy version was withdrawn;
+- do not treat `COVERAGE_SUPPORTED` as an authorisation to pay;
+- do not treat `COVERAGE_NOT_ESTABLISHED` as a finding of fraud - the
+  contract keeps those apart on purpose, and so should you;
+- do not treat `conditions_not_met` as the verdict. The precedence rules are
+  in the contract, and `verdict` is their output;
 - do not re-implement the reading. If you need a different question
-  answered, open a review that asks it.
+  answered, publish a policy version that asks it.

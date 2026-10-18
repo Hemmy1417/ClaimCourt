@@ -1239,9 +1239,11 @@ def _first_difference(own: dict, theirs: dict) -> str:
     for field in ["value_found", "value"]:
         if mine["trigger"][field] != yours["trigger"][field]:
             return "trigger." + field
-    # An accusation is decision-critical in both directions.
-    if mine["fraud"]["finding"] != yours["fraud"]["finding"]:
-        return "fraud.finding"
+    # The fraud finding is not compared directly either: every answer
+    # to it that changes anything already changes the verdict.
+    # INDICATORS_FOUND gives FRAUD_INDICATORS_FOUND and UNCLEAR gives
+    # INCONCLUSIVE, so a node that disagrees about the accusation
+    # disagrees about the verdict, which is compared.
     return ""
 
 
