@@ -5,7 +5,7 @@
 | source invariants | `python scripts/preflight.py` | 167/167 |
 | Direct Mode | `pytest tests/direct -q` | 233 passed |
 | GenVM lint and SDK validation | `genvm-lint lint contracts/claimcourt.py` then `genvm-lint check contracts/claimcourt.py` | lint passed (3 checks); validation passed, 29 methods (20 view, 9 write) |
-| mutation sweep | `python scripts/mutate.py` | <!-- SWEEP --> |
+| mutation sweep | `python scripts/mutate.py` | 43/43 killed, 0 survived |
 
 Two more gates run against the network:
 
@@ -83,7 +83,25 @@ PYTHONUTF8=1 ./.venv/Scripts/genvm-lint.exe lint contracts/claimcourt.py
 PYTHONUTF8=1 ./.venv/Scripts/python.exe scripts/verify.py
 ```
 
-<!-- CLEANCLONE -->
+**Result, 18 October 2026**, from a fresh clone of the pushed commit into
+a directory this build had never touched, with a new 3.12 virtual
+environment:
+
+| Step | Result |
+|---|---|
+| `scripts/preflight.py` | 167/167 PASS |
+| `pytest tests/direct -q` | 233 passed in 54 s |
+| `genvm-lint lint` | passed, 3 checks |
+| `genvm-lint check` | passed, ClaimCourt, 29 methods (20 view, 9 write) |
+| `scripts/verify.py` | all checks passed, including source parity; the `docs/proofs/live.md` it rewrote from the chain came out **byte-identical** to the committed copy |
+
+Nothing in the clone needed editing, no file was copied into it from the
+build machine, and the only thing it was given that `git clone` did not
+provide is the GenVM runner bundle in `~/.cache/`, which is shared by every
+project on the machine and is seeded by `scripts/fetch_genvm_bundle.py` on a
+cold cache. `genvm-lint check` also notes that a newer runner exists; the
+contract pins the runner it was deployed against on purpose, and taking the
+newer one would change the deployed bytes.
 
 One environment prerequisite is not in `requirements-test.txt` and cannot
 be: both `gltest` and `genvm-linter` download a GenVM runner bundle into
@@ -112,7 +130,47 @@ at a time in a scratch copy and runs the whole Direct Mode suite against it.
 A mutation that still passes is a hole in the tests, and is reported as
 SURVIVED.
 
-<!-- SWEEPDETAIL -->
+**Result: 43 mutations, 43 killed, 0 survived**, 18 October 2026, against
+the 233-test Direct Mode suite.
+
+It was run in two passes over the category filters
+(`grounding types gate verdict`, then
+`trigger documents validator lifecycle record reliance`) rather than as one
+process. That is a limit of the environment it was run from, not of the
+sweep: a single run of all 43 takes longer than this session would let one
+background command live, and a killed run reports nothing. Each pass
+re-runs the unmutated baseline first, and between them every one of the 43
+labels is accounted for.
+
+### What this sweep caught
+
+Two mutations survived the first pass, and neither was a staging error -
+they were a hole in the tests and an error in this documentation.
+
+| Survivor | What was actually wrong |
+|---|---|
+| the verdict is not compared | `_first_difference` compares the four criteria, and every coherent forgery in the suite moved at least one of them. The criteria loop refused each one before the verdict line was reached, so the verdict comparison was untested |
+| the document statuses are not compared | any change of `policy_status` also changes the verdict, which is compared, so the status forgeries were being caught by the verdict instead |
+
+Closing them needed the two forgeries that move the compared field and
+nothing else:
+
+- a different answer to the **fraud question**, which is the one judgement
+  that changes the verdict while leaving all four criteria exactly as they
+  were (`test_only_the_verdict_separates_two_otherwise_identical_readings`)
+- a different **reason** for the same unreadable policy document - same
+  status, same verdict, same criteria, same rows - which only the
+  `policy_reason` comparison can refuse
+  (`test_nodes_must_agree_on_why_the_policy_could_not_be_read`)
+
+Each was run against its own mutant before being trusted: both fail with
+the comparison removed and pass with it in place.
+
+The documentation was the other casualty. `README.md`, `SUBMISSION.md` and
+`docs/CONSENSUS.md` all said validators may differ on the four criteria.
+They may not - the contract compares them. The contract was not changed to
+match the documents; the documents were corrected to match the contract,
+which is also why source parity with the deployment still holds.
 
 ### What earlier sweeps caught
 

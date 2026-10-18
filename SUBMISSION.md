@@ -102,7 +102,7 @@ money.
 | pickling checks | on, passing |
 | GenVM AST lint | passed, 3 checks |
 | GenVM SDK validation | passed, 29 methods (20 view, 9 write) |
-| mutation sweep (`scripts/mutate.py`) | <!-- SWEEP --> |
+| mutation sweep (`scripts/mutate.py`) | 43/43 killed, 0 survived |
 | hosted integration | 5 passed in 17 min 44 s on hosted Studionet |
 | CI (`.github/workflows/gates.yml`) | the offline gates on ubuntu, green |
 
